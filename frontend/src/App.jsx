@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import "./App.css";
 
-const API_URL = "https://contact-vault-api.onrender.com/api/contacts";
+import { useAuth } from "./Auth.jsx";
+import Login from "./Login.jsx";
+import Register from "./Register.jsx";
+
+const API_URL =
+  "https://contact-vault-api.onrender.com/api/contacts";
 
 const emptyContact = {
   name: "",
@@ -53,6 +58,15 @@ const emptyContact = {
 };
 
 function App() {
+  const {
+    user,
+    token,
+    loading: authLoading,
+    logout,
+  } = useAuth();
+
+  const [showRegister, setShowRegister] = useState(false);
+
   const [contacts, setContacts] = useState([]);
   const [activePage, setActivePage] = useState("dashboard");
   const [searchTerm, setSearchTerm] = useState("");
@@ -66,20 +80,49 @@ function App() {
   const [showView, setShowView] = useState(false);
 
   useEffect(() => {
-    fetchContacts();
-  }, []);
+    if (token) {
+      fetchContacts();
+    } else {
+      setContacts([]);
+      setLoading(false);
+    }
+  }, [token]);
+
+  const authHeaders = () => ({
+    Authorization: `Bearer ${token}`,
+  });
 
   const fetchContacts = async () => {
+    if (!token) {
+      setContacts([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
+      setError("");
 
-      const response = await fetch(API_URL);
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch contacts");
-      }
+      const response = await fetch(API_URL, {
+        headers: authHeaders(),
+      });
 
       const data = await response.json();
+
+      if (!response.ok) {
+        if (
+          response.status === 401 ||
+          data.message === "Invalid or expired token" ||
+          data.message === "Authentication required"
+        ) {
+          logout();
+          return;
+        }
+
+        throw new Error(
+          data.message || "Failed to fetch contacts"
+        );
+      }
 
       setContacts(data.contacts || []);
     } catch (err) {
@@ -168,18 +211,23 @@ function App() {
       let response;
 
       if (editingContact) {
-        response = await fetch(`${API_URL}/${editingContact._id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-        });
+        response = await fetch(
+          `${API_URL}/${editingContact._id}`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+          }
+        );
       } else {
         response = await fetch(API_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(payload),
         });
@@ -187,8 +235,15 @@ function App() {
 
       const data = await response.json();
 
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(data.message || "Operation failed");
+        throw new Error(
+          data.message || "Operation failed"
+        );
       }
 
       await fetchContacts();
@@ -203,7 +258,9 @@ function App() {
       setActivePage("contacts");
     } catch (err) {
       console.error(err);
-      setError(err.message || "Unable to save contact");
+      setError(
+        err.message || "Unable to save contact"
+      );
     }
   };
 
@@ -217,18 +274,33 @@ function App() {
     }
 
     try {
-      const response = await fetch(`${API_URL}/${id}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        `${API_URL}/${id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
       const data = await response.json();
 
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(data.message || "Delete failed");
+        throw new Error(
+          data.message || "Delete failed"
+        );
       }
 
       setContacts((previous) =>
-        previous.filter((contact) => contact._id !== id)
+        previous.filter(
+          (contact) => contact._id !== id
+        )
       );
 
       showMessage("Contact deleted successfully");
@@ -240,33 +312,48 @@ function App() {
 
   const toggleFavorite = async (contact) => {
     try {
-      const response = await fetch(`${API_URL}/${contact._id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...contact,
-          favorite: !contact.favorite,
-          tags: Array.isArray(contact.tags)
-            ? contact.tags
-            : contact.tags
-              ? contact.tags.split(",").map((tag) => tag.trim())
+      const response = await fetch(
+        `${API_URL}/${contact._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            ...contact,
+            favorite: !contact.favorite,
+            tags: Array.isArray(contact.tags)
+              ? contact.tags
+              : contact.tags
+              ? contact.tags
+                  .split(",")
+                  .map((tag) => tag.trim())
               : [],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Favorite update failed");
-      }
+          }),
+        }
+      );
 
       const data = await response.json();
+
+      if (response.status === 401) {
+        logout();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message || "Favorite update failed"
+        );
+      }
 
       const updatedContact = data.contact;
 
       setContacts((previous) =>
         previous.map((item) =>
-          item._id === contact._id ? updatedContact : item
+          item._id === contact._id
+            ? updatedContact
+            : item
         )
       );
     } catch (err) {
@@ -326,7 +413,10 @@ function App() {
     const locationSet = new Set();
 
     contacts.forEach((contact) => {
-      const location = [contact.city, contact.state]
+      const location = [
+        contact.city,
+        contact.state,
+      ]
         .filter(Boolean)
         .join(", ");
 
@@ -340,7 +430,9 @@ function App() {
 
   const exportExcel = () => {
     if (contacts.length === 0) {
-      showMessage("No contacts available to export");
+      showMessage(
+        "No contacts available to export"
+      );
       return;
     }
 
@@ -353,13 +445,18 @@ function App() {
       Relationship: contact.relationship || "",
 
       "Primary Phone": contact.phone || "",
-      "Alternate Phone": contact.alternatePhone || "",
-      "WhatsApp Number": contact.whatsappNumber || "",
+      "Alternate Phone":
+        contact.alternatePhone || "",
+      "WhatsApp Number":
+        contact.whatsappNumber || "",
       "Personal Email": contact.email || "",
-      "Work/College Email": contact.workEmail || "",
+      "Work/College Email":
+        contact.workEmail || "",
 
-      "Address Line 1": contact.addressLine1 || "",
-      "Address Line 2": contact.addressLine2 || "",
+      "Address Line 1":
+        contact.addressLine1 || "",
+      "Address Line 2":
+        contact.addressLine2 || "",
       City: contact.city || "",
       State: contact.state || "",
       Country: contact.country || "",
@@ -369,38 +466,59 @@ function App() {
       Designation: contact.designation || "",
       Department: contact.department || "",
       "Employee ID": contact.employeeId || "",
-      "Work Location": contact.workLocation || "",
+      "Work Location":
+        contact.workLocation || "",
 
       Institution: contact.institution || "",
       Course: contact.course || "",
-      "Register Number": contact.registerNumber || "",
-      "Year of Study": contact.yearOfStudy || "",
-      "Graduation Year": contact.graduationYear || "",
+      "Register Number":
+        contact.registerNumber || "",
+      "Year of Study":
+        contact.yearOfStudy || "",
+      "Graduation Year":
+        contact.graduationYear || "",
 
-      "Father Name": contact.fatherName || "",
-      "Father Phone Number": contact.fatherPhone || "",
-      "Mother Name": contact.motherName || "",
-      "Mother Phone Number": contact.motherPhone || "",
+      "Father Name":
+        contact.fatherName || "",
+      "Father Phone Number":
+        contact.fatherPhone || "",
+      "Mother Name":
+        contact.motherName || "",
+      "Mother Phone Number":
+        contact.motherPhone || "",
 
       LinkedIn: contact.linkedin || "",
       GitHub: contact.github || "",
-      "Personal Website": contact.personalWebsite || "",
+      "Personal Website":
+        contact.personalWebsite || "",
 
-      "Blood Group": contact.bloodGroup || "",
+      "Blood Group":
+        contact.bloodGroup || "",
       Notes: contact.notes || "",
       Tags: Array.isArray(contact.tags)
         ? contact.tags.join(", ")
         : contact.tags || "",
-      Favorite: contact.favorite ? "Yes" : "No",
+      Favorite: contact.favorite
+        ? "Yes"
+        : "No",
     }));
 
-    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const worksheet =
+      XLSX.utils.json_to_sheet(excelData);
 
-    const workbook = XLSX.utils.book_new();
+    const workbook =
+      XLSX.utils.book_new();
 
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Contacts");
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      "Contacts"
+    );
 
-    XLSX.writeFile(workbook, "Contact_Vault_Contacts.xlsx");
+    XLSX.writeFile(
+      workbook,
+      "Contact_Vault_Contacts.xlsx"
+    );
 
     showMessage("Excel exported successfully");
   };
@@ -409,7 +527,9 @@ function App() {
     return (
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-logo">CV</div>
+          <div className="brand-logo">
+            CV
+          </div>
 
           <div>
             <h1>Contact Vault</h1>
@@ -419,7 +539,11 @@ function App() {
 
         <nav className="sidebar-nav">
           <button
-            className={activePage === "dashboard" ? "nav-item active" : "nav-item"}
+            className={
+              activePage === "dashboard"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => {
               setShowForm(false);
               setActivePage("dashboard");
@@ -430,7 +554,11 @@ function App() {
           </button>
 
           <button
-            className={activePage === "add" ? "nav-item active" : "nav-item"}
+            className={
+              activePage === "add"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={openAddForm}
           >
             <span>＋</span>
@@ -439,7 +567,9 @@ function App() {
 
           <button
             className={
-              activePage === "contacts" ? "nav-item active" : "nav-item"
+              activePage === "contacts"
+                ? "nav-item active"
+                : "nav-item"
             }
             onClick={() => {
               setShowForm(false);
@@ -451,7 +581,11 @@ function App() {
           </button>
 
           <button
-            className={activePage === "search" ? "nav-item active" : "nav-item"}
+            className={
+              activePage === "search"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => {
               setShowForm(false);
               setActivePage("search");
@@ -462,7 +596,11 @@ function App() {
           </button>
 
           <button
-            className={activePage === "export" ? "nav-item active" : "nav-item"}
+            className={
+              activePage === "export"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => {
               setShowForm(false);
               setActivePage("export");
@@ -473,7 +611,11 @@ function App() {
           </button>
 
           <button
-            className={activePage === "settings" ? "nav-item active" : "nav-item"}
+            className={
+              activePage === "settings"
+                ? "nav-item active"
+                : "nav-item"
+            }
             onClick={() => {
               setShowForm(false);
               setActivePage("settings");
@@ -482,15 +624,27 @@ function App() {
             <span>⚙</span>
             Settings
           </button>
+
+          <button
+            className="nav-item"
+            onClick={logout}
+          >
+            <span>↪</span>
+            Logout
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
           <div className="secure-box">
-            <div className="secure-icon">🔒</div>
+            <div className="secure-icon">
+              🔒
+            </div>
 
             <div>
               <strong>Secure Vault</strong>
-              <small>Your contacts are safe</small>
+              <small>
+                Your contacts are safe
+              </small>
             </div>
           </div>
         </div>
@@ -502,28 +656,53 @@ function App() {
     return (
       <header className="topbar">
         <div>
-          <p className="topbar-label">CONTACT MANAGEMENT</p>
+          <p className="topbar-label">
+            CONTACT MANAGEMENT
+          </p>
 
           <h2>
-            {activePage === "dashboard" && "Dashboard"}
-            {activePage === "contacts" && "All Contacts"}
+            {activePage === "dashboard" &&
+              "Dashboard"}
+
+            {activePage === "contacts" &&
+              "All Contacts"}
+
             {activePage === "add" &&
-              (editingContact ? "Edit Contact" : "Add Contact")}
-            {activePage === "search" && "Search Contacts"}
-            {activePage === "export" && "Export Contacts"}
-            {activePage === "settings" && "Settings"}
+              (editingContact
+                ? "Edit Contact"
+                : "Add Contact")}
+
+            {activePage === "search" &&
+              "Search Contacts"}
+
+            {activePage === "export" &&
+              "Export Contacts"}
+
+            {activePage === "settings" &&
+              "Settings"}
           </h2>
         </div>
 
         <div className="topbar-actions">
-          <button className="icon-button">🔔</button>
+          <button className="icon-button">
+            🔔
+          </button>
 
           <div className="profile">
-            <div className="profile-avatar">V</div>
+            <div className="profile-avatar">
+              {user?.name
+                ?.charAt(0)
+                ?.toUpperCase() || "U"}
+            </div>
 
             <div>
-              <strong>Vignesh</strong>
-              <span>Administrator</span>
+              <strong>
+                {user?.name || "User"}
+              </strong>
+
+              <span>
+                {user?.email || "Account"}
+              </span>
             </div>
           </div>
         </div>
@@ -535,7 +714,9 @@ function App() {
     return (
       <section className="stats-grid">
         <div className="stat-card">
-          <div className="stat-icon blue">♟</div>
+          <div className="stat-icon blue">
+            ♟
+          </div>
 
           <div>
             <span>Total Contacts</span>
@@ -544,16 +725,22 @@ function App() {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon yellow">★</div>
+          <div className="stat-icon yellow">
+            ★
+          </div>
 
           <div>
             <span>Favorites</span>
-            <strong>{favoriteContacts.length}</strong>
+            <strong>
+              {favoriteContacts.length}
+            </strong>
           </div>
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon purple">▣</div>
+          <div className="stat-icon purple">
+            ▣
+          </div>
 
           <div>
             <span>Companies</span>
@@ -562,7 +749,9 @@ function App() {
         </div>
 
         <div className="stat-card">
-          <div className="stat-icon green">⌖</div>
+          <div className="stat-icon green">
+            ⌖
+          </div>
 
           <div>
             <span>Locations</span>
@@ -583,12 +772,16 @@ function App() {
             type="text"
             placeholder="Search contacts by name, phone, email, company..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) =>
+              setSearchTerm(e.target.value)
+            }
           />
 
           {searchTerm && (
             <button
-              onClick={() => setSearchTerm("")}
+              onClick={() =>
+                setSearchTerm("")
+              }
               className="clear-search"
             >
               ×
@@ -596,7 +789,10 @@ function App() {
           )}
         </div>
 
-        <button className="primary-button" onClick={openAddForm}>
+        <button
+          className="primary-button"
+          onClick={openAddForm}
+        >
           ＋ Add Contact
         </button>
       </div>
@@ -605,15 +801,20 @@ function App() {
 
   const renderContactCard = (contact) => {
     const fullName =
-      `${contact.name || ""} ${contact.surname || ""}`.trim() ||
-      "Unnamed Contact";
+      `${contact.name || ""} ${
+        contact.surname || ""
+      }`.trim() || "Unnamed Contact";
 
     const initials =
-      `${contact.name?.charAt(0) || ""}${contact.surname?.charAt(0) || ""}` ||
-      "C";
+      `${contact.name?.charAt(0) || ""}${
+        contact.surname?.charAt(0) || ""
+      }` || "C";
 
     return (
-      <div className="contact-card" key={contact._id}>
+      <div
+        className="contact-card"
+        key={contact._id}
+      >
         <div className="contact-main">
           <div className="contact-avatar">
             {initials.toUpperCase()}
@@ -629,15 +830,21 @@ function App() {
                     ? "favorite-button favorite-active"
                     : "favorite-button"
                 }
-                onClick={() => toggleFavorite(contact)}
+                onClick={() =>
+                  toggleFavorite(contact)
+                }
                 title="Favorite"
               >
-                {contact.favorite ? "★" : "☆"}
+                {contact.favorite
+                  ? "★"
+                  : "☆"}
               </button>
             </div>
 
             {contact.nickname && (
-              <p className="nickname">"{contact.nickname}"</p>
+              <p className="nickname">
+                "{contact.nickname}"
+              </p>
             )}
 
             {contact.relationship && (
@@ -648,24 +855,37 @@ function App() {
 
             <div className="contact-details">
               {contact.phone && (
-                <span>📞 {contact.phone}</span>
+                <span>
+                  📞 {contact.phone}
+                </span>
               )}
 
               {contact.email && (
-                <span>✉ {contact.email}</span>
+                <span>
+                  ✉ {contact.email}
+                </span>
               )}
 
               {contact.company && (
-                <span>▣ {contact.company}</span>
+                <span>
+                  ▣ {contact.company}
+                </span>
               )}
 
               {contact.designation && (
-                <span>💼 {contact.designation}</span>
+                <span>
+                  💼 {contact.designation}
+                </span>
               )}
 
-              {(contact.city || contact.state) && (
+              {(contact.city ||
+                contact.state) && (
                 <span>
-                  📍 {[contact.city, contact.state]
+                  📍{" "}
+                  {[
+                    contact.city,
+                    contact.state,
+                  ]
                     .filter(Boolean)
                     .join(", ")}
                 </span>
@@ -673,18 +893,29 @@ function App() {
             </div>
 
             {contact.tags &&
-              (Array.isArray(contact.tags)
+              (Array.isArray(
+                contact.tags
+              )
                 ? contact.tags.length > 0
                 : contact.tags.length > 0) && (
                 <div className="tag-list">
-                  {(Array.isArray(contact.tags)
+                  {(Array.isArray(
+                    contact.tags
+                  )
                     ? contact.tags
-                    : contact.tags.split(",")
-                  ).map((tag, index) => (
-                    <span key={index} className="tag">
-                      {String(tag).trim()}
-                    </span>
-                  ))}
+                    : contact.tags.split(
+                        ","
+                      )
+                  ).map(
+                    (tag, index) => (
+                      <span
+                        key={index}
+                        className="tag"
+                      >
+                        {String(tag).trim()}
+                      </span>
+                    )
+                  )}
                 </div>
               )}
           </div>
@@ -693,21 +924,27 @@ function App() {
         <div className="contact-actions">
           <button
             className="view-button"
-            onClick={() => openViewContact(contact)}
+            onClick={() =>
+              openViewContact(contact)
+            }
           >
             View
           </button>
 
           <button
             className="edit-button"
-            onClick={() => openEditForm(contact)}
+            onClick={() =>
+              openEditForm(contact)
+            }
           >
             Edit
           </button>
 
           <button
             className="delete-button"
-            onClick={() => deleteContact(contact._id)}
+            onClick={() =>
+              deleteContact(contact._id)
+            }
           >
             Delete
           </button>
@@ -716,11 +953,14 @@ function App() {
     );
   };
 
-  const renderContacts = (list = filteredContacts) => {
+  const renderContacts = (
+    list = filteredContacts
+  ) => {
     if (loading) {
       return (
         <div className="empty-state">
           <div className="loading-spinner"></div>
+
           <h3>Loading contacts...</h3>
         </div>
       );
@@ -729,7 +969,9 @@ function App() {
     if (list.length === 0) {
       return (
         <div className="empty-state">
-          <div className="empty-icon">♟</div>
+          <div className="empty-icon">
+            ♟
+          </div>
 
           <h3>No contacts found</h3>
 
@@ -740,7 +982,10 @@ function App() {
           </p>
 
           {!searchTerm && (
-            <button className="primary-button" onClick={openAddForm}>
+            <button
+              className="primary-button"
+              onClick={openAddForm}
+            >
               ＋ Add Your First Contact
             </button>
           )}
@@ -750,7 +995,9 @@ function App() {
 
     return (
       <div className="contacts-list">
-        {list.map((contact) => renderContactCard(contact))}
+        {list.map((contact) =>
+          renderContactCard(contact)
+        )}
       </div>
     );
   };
@@ -763,18 +1010,25 @@ function App() {
         <div className="section-heading">
           <div>
             <h3>Recent Contacts</h3>
-            <p>Your recently stored contacts</p>
+
+            <p>
+              Your recently stored contacts
+            </p>
           </div>
 
           <button
             className="text-button"
-            onClick={() => setActivePage("contacts")}
+            onClick={() =>
+              setActivePage("contacts")
+            }
           >
             View All →
           </button>
         </div>
 
-        {renderContacts(contacts.slice(0, 5))}
+        {renderContacts(
+          contacts.slice(0, 5)
+        )}
       </>
     );
   };
@@ -785,7 +1039,9 @@ function App() {
         <div className="form-header">
           <div>
             <h3>
-              {editingContact ? "Edit Contact" : "Add New Contact"}
+              {editingContact
+                ? "Edit Contact"
+                : "Add New Contact"}
             </h3>
 
             <p>
@@ -796,7 +1052,10 @@ function App() {
           </div>
 
           <div className="form-header-actions">
-            <button className="secondary-button" onClick={closeForm}>
+            <button
+              className="secondary-button"
+              onClick={closeForm}
+            >
               Cancel
             </button>
 
@@ -804,7 +1063,9 @@ function App() {
               className="primary-button"
               onClick={handleSubmit}
             >
-              {editingContact ? "Update Contact" : "Save Contact"}
+              {editingContact
+                ? "Update Contact"
+                : "Save Contact"}
             </button>
           </div>
         </div>
@@ -812,11 +1073,15 @@ function App() {
         <form onSubmit={handleSubmit}>
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">01</span>
+              <span className="section-number">
+                01
+              </span>
 
               <div>
                 <h3>Basic Information</h3>
-                <p>Basic personal details</p>
+                <p>
+                  Basic personal details
+                </p>
               </div>
             </div>
 
@@ -847,7 +1112,9 @@ function App() {
                 label="Date of Birth"
                 name="dateOfBirth"
                 type="date"
-                value={formData.dateOfBirth}
+                value={
+                  formData.dateOfBirth
+                }
                 onChange={handleChange}
               />
 
@@ -856,13 +1123,19 @@ function App() {
                 name="gender"
                 value={formData.gender}
                 onChange={handleChange}
-                options={["Male", "Female", "Other"]}
+                options={[
+                  "Male",
+                  "Female",
+                  "Other",
+                ]}
               />
 
               <FormField
                 label="Relationship"
                 name="relationship"
-                value={formData.relationship}
+                value={
+                  formData.relationship
+                }
                 onChange={handleChange}
                 placeholder="Friend, Family, Colleague..."
               />
@@ -871,11 +1144,18 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">02</span>
+              <span className="section-number">
+                02
+              </span>
 
               <div>
-                <h3>Contact Information</h3>
-                <p>Phone numbers and email addresses</p>
+                <h3>
+                  Contact Information
+                </h3>
+                <p>
+                  Phone numbers and email
+                  addresses
+                </p>
               </div>
             </div>
 
@@ -891,14 +1171,18 @@ function App() {
               <FormField
                 label="Alternate Phone"
                 name="alternatePhone"
-                value={formData.alternatePhone}
+                value={
+                  formData.alternatePhone
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="WhatsApp Number"
                 name="whatsappNumber"
-                value={formData.whatsappNumber}
+                value={
+                  formData.whatsappNumber
+                }
                 onChange={handleChange}
               />
 
@@ -914,7 +1198,9 @@ function App() {
                 label="Work / College Email"
                 name="workEmail"
                 type="email"
-                value={formData.workEmail}
+                value={
+                  formData.workEmail
+                }
                 onChange={handleChange}
               />
             </div>
@@ -922,11 +1208,16 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">03</span>
+              <span className="section-number">
+                03
+              </span>
 
               <div>
                 <h3>Address</h3>
-                <p>Complete location information</p>
+                <p>
+                  Complete location
+                  information
+                </p>
               </div>
             </div>
 
@@ -934,7 +1225,9 @@ function App() {
               <FormField
                 label="Address Line 1"
                 name="addressLine1"
-                value={formData.addressLine1}
+                value={
+                  formData.addressLine1
+                }
                 onChange={handleChange}
                 wide
               />
@@ -942,7 +1235,9 @@ function App() {
               <FormField
                 label="Address Line 2"
                 name="addressLine2"
-                value={formData.addressLine2}
+                value={
+                  formData.addressLine2
+                }
                 onChange={handleChange}
                 wide
               />
@@ -979,11 +1274,16 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">04</span>
+              <span className="section-number">
+                04
+              </span>
 
               <div>
                 <h3>Professional</h3>
-                <p>Work and company information</p>
+                <p>
+                  Work and company
+                  information
+                </p>
               </div>
             </div>
 
@@ -998,28 +1298,36 @@ function App() {
               <FormField
                 label="Designation"
                 name="designation"
-                value={formData.designation}
+                value={
+                  formData.designation
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Department"
                 name="department"
-                value={formData.department}
+                value={
+                  formData.department
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Employee ID"
                 name="employeeId"
-                value={formData.employeeId}
+                value={
+                  formData.employeeId
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Work Location"
                 name="workLocation"
-                value={formData.workLocation}
+                value={
+                  formData.workLocation
+                }
                 onChange={handleChange}
                 wide
               />
@@ -1028,11 +1336,15 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">05</span>
+              <span className="section-number">
+                05
+              </span>
 
               <div>
                 <h3>Education</h3>
-                <p>Academic information</p>
+                <p>
+                  Academic information
+                </p>
               </div>
             </div>
 
@@ -1040,7 +1352,9 @@ function App() {
               <FormField
                 label="Institution"
                 name="institution"
-                value={formData.institution}
+                value={
+                  formData.institution
+                }
                 onChange={handleChange}
               />
 
@@ -1054,21 +1368,27 @@ function App() {
               <FormField
                 label="Register Number"
                 name="registerNumber"
-                value={formData.registerNumber}
+                value={
+                  formData.registerNumber
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Year of Study"
                 name="yearOfStudy"
-                value={formData.yearOfStudy}
+                value={
+                  formData.yearOfStudy
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Graduation Year"
                 name="graduationYear"
-                value={formData.graduationYear}
+                value={
+                  formData.graduationYear
+                }
                 onChange={handleChange}
               />
             </div>
@@ -1076,11 +1396,15 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">06</span>
+              <span className="section-number">
+                06
+              </span>
 
               <div>
                 <h3>Family</h3>
-                <p>Parent information</p>
+                <p>
+                  Parent information
+                </p>
               </div>
             </div>
 
@@ -1088,28 +1412,36 @@ function App() {
               <FormField
                 label="Father Name"
                 name="fatherName"
-                value={formData.fatherName}
+                value={
+                  formData.fatherName
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Father Phone Number"
                 name="fatherPhone"
-                value={formData.fatherPhone}
+                value={
+                  formData.fatherPhone
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Mother Name"
                 name="motherName"
-                value={formData.motherName}
+                value={
+                  formData.motherName
+                }
                 onChange={handleChange}
               />
 
               <FormField
                 label="Mother Phone Number"
                 name="motherPhone"
-                value={formData.motherPhone}
+                value={
+                  formData.motherPhone
+                }
                 onChange={handleChange}
               />
             </div>
@@ -1117,11 +1449,16 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">07</span>
+              <span className="section-number">
+                07
+              </span>
 
               <div>
                 <h3>Online</h3>
-                <p>Social and professional profiles</p>
+                <p>
+                  Social and professional
+                  profiles
+                </p>
               </div>
             </div>
 
@@ -1129,7 +1466,9 @@ function App() {
               <FormField
                 label="LinkedIn"
                 name="linkedin"
-                value={formData.linkedin}
+                value={
+                  formData.linkedin
+                }
                 onChange={handleChange}
                 wide
                 placeholder="https://linkedin.com/in/..."
@@ -1147,7 +1486,9 @@ function App() {
               <FormField
                 label="Personal Website"
                 name="personalWebsite"
-                value={formData.personalWebsite}
+                value={
+                  formData.personalWebsite
+                }
                 onChange={handleChange}
                 wide
                 placeholder="https://..."
@@ -1157,11 +1498,16 @@ function App() {
 
           <section className="form-section">
             <div className="section-title">
-              <span className="section-number">08</span>
+              <span className="section-number">
+                08
+              </span>
 
               <div>
                 <h3>Additional</h3>
-                <p>Extra information and organization</p>
+                <p>
+                  Extra information and
+                  organization
+                </p>
               </div>
             </div>
 
@@ -1169,7 +1515,9 @@ function App() {
               <FormField
                 label="Blood Group"
                 name="bloodGroup"
-                value={formData.bloodGroup}
+                value={
+                  formData.bloodGroup
+                }
                 onChange={handleChange}
                 placeholder="O+, A+, B+, AB+..."
               />
@@ -1198,11 +1546,16 @@ function App() {
                 <input
                   type="checkbox"
                   name="favorite"
-                  checked={formData.favorite}
+                  checked={
+                    formData.favorite
+                  }
                   onChange={handleChange}
                 />
 
-                <span>★ Mark as Favorite Contact</span>
+                <span>
+                  ★ Mark as Favorite
+                  Contact
+                </span>
               </label>
             </div>
           </section>
@@ -1216,7 +1569,10 @@ function App() {
               Cancel
             </button>
 
-            <button type="submit" className="primary-button">
+            <button
+              type="submit"
+              className="primary-button"
+            >
               {editingContact
                 ? "Update Contact"
                 : "Save Contact"}
@@ -1232,15 +1588,23 @@ function App() {
       <>
         <div className="page-intro">
           <h3>Search Contacts</h3>
-          <p>Find contacts using any available information.</p>
+          <p>
+            Find contacts using any
+            available information.
+          </p>
         </div>
 
         {renderSearchBar()}
 
         {searchTerm && (
           <div className="search-result-info">
-            <strong>{filteredContacts.length}</strong> contacts found for
-            <span>"{searchTerm}"</span>
+            <strong>
+              {filteredContacts.length}
+            </strong>{" "}
+            contacts found for{" "}
+            <span>
+              "{searchTerm}"
+            </span>
           </div>
         )}
 
@@ -1253,33 +1617,49 @@ function App() {
     return (
       <div className="export-page">
         <div className="export-card">
-          <div className="export-icon">📊</div>
+          <div className="export-icon">
+            📊
+          </div>
 
           <h3>Export Contact Vault</h3>
 
           <p>
-            Download all your contacts with the complete expanded
-            contact information in Excel format.
+            Download all your contacts
+            with the complete expanded
+            contact information in Excel
+            format.
           </p>
 
           <div className="export-stats">
             <div>
-              <strong>{contacts.length}</strong>
+              <strong>
+                {contacts.length}
+              </strong>
+
               <span>Contacts</span>
             </div>
 
             <div>
-              <strong>{companies.length}</strong>
+              <strong>
+                {companies.length}
+              </strong>
+
               <span>Companies</span>
             </div>
 
             <div>
-              <strong>{locations.length}</strong>
+              <strong>
+                {locations.length}
+              </strong>
+
               <span>Locations</span>
             </div>
           </div>
 
-          <button className="primary-button large" onClick={exportExcel}>
+          <button
+            className="primary-button large"
+            onClick={exportExcel}
+          >
             ⇩ Export Excel
           </button>
         </div>
@@ -1291,44 +1671,87 @@ function App() {
     return (
       <div className="settings-page">
         <div className="settings-card">
-          <h3>Application Settings</h3>
+          <h3>
+            Application Settings
+          </h3>
 
           <p>
-            Contact Vault configuration and application information.
+            Contact Vault configuration
+            and application information.
           </p>
 
           <div className="setting-row">
             <div>
-              <strong>Application</strong>
-              <span>Contact Vault</span>
+              <strong>
+                Application
+              </strong>
+
+              <span>
+                Contact Vault
+              </span>
             </div>
           </div>
 
           <div className="setting-row">
             <div>
-              <strong>Backend API</strong>
-              <span>http://localhost:5000</span>
+              <strong>
+                Backend API
+              </strong>
+
+              <span>
+                contact-vault-api.onrender.com
+              </span>
             </div>
 
-            <span className="status-badge">Connected</span>
+            <span className="status-badge">
+              Connected
+            </span>
           </div>
 
           <div className="setting-row">
             <div>
-              <strong>Database</strong>
+              <strong>
+                Database
+              </strong>
+
               <span>MongoDB</span>
             </div>
 
-            <span className="status-badge">Active</span>
+            <span className="status-badge">
+              Active
+            </span>
           </div>
 
           <div className="setting-row">
             <div>
-              <strong>Frontend</strong>
-              <span>React + Vite</span>
+              <strong>
+                Frontend
+              </strong>
+
+              <span>
+                React + Vite
+              </span>
             </div>
 
-            <span className="status-badge">Active</span>
+            <span className="status-badge">
+              Active
+            </span>
+          </div>
+
+          <div className="setting-row">
+            <div>
+              <strong>
+                Account
+              </strong>
+
+              <span>
+                {user?.email || "Unknown"}
+              </span>
+            </div>
+
+            <span className="status-badge">
+              Secure
+            </span>
           </div>
         </div>
       </div>
@@ -1336,7 +1759,10 @@ function App() {
   };
 
   const renderMainContent = () => {
-    if (showForm || activePage === "add") {
+    if (
+      showForm ||
+      activePage === "add"
+    ) {
       return renderContactForm();
     }
 
@@ -1352,7 +1778,11 @@ function App() {
           <div className="section-heading">
             <div>
               <h3>All Contacts</h3>
-              <p>{filteredContacts.length} contacts available</p>
+
+              <p>
+                {filteredContacts.length}{" "}
+                contacts available
+              </p>
             </div>
           </div>
 
@@ -1376,6 +1806,38 @@ function App() {
     return renderDashboard();
   };
 
+  if (authLoading) {
+    return (
+      <div className="auth-loading">
+        <div className="loading-spinner"></div>
+
+        <h3>
+          Loading ContactVault...
+        </h3>
+      </div>
+    );
+  }
+
+  if (!user) {
+    if (showRegister) {
+      return (
+        <Register
+          onLogin={() =>
+            setShowRegister(false)
+          }
+        />
+      );
+    }
+
+    return (
+      <Login
+        onRegister={() =>
+          setShowRegister(true)
+        }
+      />
+    );
+  }
+
   return (
     <div className="app">
       {renderSidebar()}
@@ -1396,7 +1858,13 @@ function App() {
               <span>!</span>
               {error}
 
-              <button onClick={() => setError("")}>×</button>
+              <button
+                onClick={() =>
+                  setError("")
+                }
+              >
+                ×
+              </button>
             </div>
           )}
 
@@ -1404,169 +1872,312 @@ function App() {
         </main>
       </div>
 
-      {showView && viewingContact && (
-        <div className="view-overlay" onClick={closeViewContact}>
+      {showView &&
+        viewingContact && (
           <div
-            className="view-modal"
-            onClick={(e) => e.stopPropagation()}
+            className="view-overlay"
+            onClick={closeViewContact}
           >
-            <div className="view-header">
-              <div>
-                <h2>
-                  {viewingContact.name || ""}{" "}
-                  {viewingContact.surname || ""}
-                </h2>
-                <p>
-                  {viewingContact.relationship || "Contact Details"}
-                </p>
+            <div
+              className="view-modal"
+              onClick={(e) =>
+                e.stopPropagation()
+              }
+            >
+              <div className="view-header">
+                <div>
+                  <h2>
+                    {viewingContact.name ||
+                      ""}{" "}
+                    {viewingContact.surname ||
+                      ""}
+                  </h2>
+
+                  <p>
+                    {viewingContact.relationship ||
+                      "Contact Details"}
+                  </p>
+                </div>
+
+                <button
+                  className="close-view"
+                  onClick={
+                    closeViewContact
+                  }
+                >
+                  ×
+                </button>
               </div>
 
-              <button
-                className="close-view"
-                onClick={closeViewContact}
-              >
-                ×
-              </button>
-            </div>
+              <div className="view-content">
+                <ViewSection
+                  title="👤 Basic Information"
+                  fields={[
+                    [
+                      "First Name",
+                      viewingContact.name,
+                    ],
+                    [
+                      "Last Name",
+                      viewingContact.surname,
+                    ],
+                    [
+                      "Nickname",
+                      viewingContact.nickname,
+                    ],
+                    [
+                      "Date of Birth",
+                      viewingContact.dateOfBirth,
+                    ],
+                    [
+                      "Gender",
+                      viewingContact.gender,
+                    ],
+                    [
+                      "Relationship",
+                      viewingContact.relationship,
+                    ],
+                  ]}
+                />
 
-            <div className="view-content">
-              <ViewSection
-                title="👤 Basic Information"
-                fields={[
-                  ["First Name", viewingContact.name],
-                  ["Last Name", viewingContact.surname],
-                  ["Nickname", viewingContact.nickname],
-                  ["Date of Birth", viewingContact.dateOfBirth],
-                  ["Gender", viewingContact.gender],
-                  ["Relationship", viewingContact.relationship],
-                ]}
-              />
+                <ViewSection
+                  title="📞 Contact Information"
+                  fields={[
+                    [
+                      "Primary Phone",
+                      viewingContact.phone,
+                    ],
+                    [
+                      "Alternate Phone",
+                      viewingContact.alternatePhone,
+                    ],
+                    [
+                      "WhatsApp Number",
+                      viewingContact.whatsappNumber,
+                    ],
+                    [
+                      "Personal Email",
+                      viewingContact.email,
+                    ],
+                    [
+                      "Work / College Email",
+                      viewingContact.workEmail,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="📞 Contact Information"
-                fields={[
-                  ["Primary Phone", viewingContact.phone],
-                  ["Alternate Phone", viewingContact.alternatePhone],
-                  ["WhatsApp Number", viewingContact.whatsappNumber],
-                  ["Personal Email", viewingContact.email],
-                  ["Work / College Email", viewingContact.workEmail],
-                ]}
-              />
+                <ViewSection
+                  title="🏠 Address"
+                  fields={[
+                    [
+                      "Address Line 1",
+                      viewingContact.addressLine1,
+                    ],
+                    [
+                      "Address Line 2",
+                      viewingContact.addressLine2,
+                    ],
+                    [
+                      "City",
+                      viewingContact.city,
+                    ],
+                    [
+                      "State",
+                      viewingContact.state,
+                    ],
+                    [
+                      "Country",
+                      viewingContact.country,
+                    ],
+                    [
+                      "PIN Code",
+                      viewingContact.pinCode,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="🏠 Address"
-                fields={[
-                  ["Address Line 1", viewingContact.addressLine1],
-                  ["Address Line 2", viewingContact.addressLine2],
-                  ["City", viewingContact.city],
-                  ["State", viewingContact.state],
-                  ["Country", viewingContact.country],
-                  ["PIN Code", viewingContact.pinCode],
-                ]}
-              />
+                <ViewSection
+                  title="💼 Professional"
+                  fields={[
+                    [
+                      "Company",
+                      viewingContact.company,
+                    ],
+                    [
+                      "Designation",
+                      viewingContact.designation,
+                    ],
+                    [
+                      "Department",
+                      viewingContact.department,
+                    ],
+                    [
+                      "Employee ID",
+                      viewingContact.employeeId,
+                    ],
+                    [
+                      "Work Location",
+                      viewingContact.workLocation,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="💼 Professional"
-                fields={[
-                  ["Company", viewingContact.company],
-                  ["Designation", viewingContact.designation],
-                  ["Department", viewingContact.department],
-                  ["Employee ID", viewingContact.employeeId],
-                  ["Work Location", viewingContact.workLocation],
-                ]}
-              />
+                <ViewSection
+                  title="🎓 Education"
+                  fields={[
+                    [
+                      "Institution",
+                      viewingContact.institution,
+                    ],
+                    [
+                      "Course",
+                      viewingContact.course,
+                    ],
+                    [
+                      "Register Number",
+                      viewingContact.registerNumber,
+                    ],
+                    [
+                      "Year of Study",
+                      viewingContact.yearOfStudy,
+                    ],
+                    [
+                      "Graduation Year",
+                      viewingContact.graduationYear,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="🎓 Education"
-                fields={[
-                  ["Institution", viewingContact.institution],
-                  ["Course", viewingContact.course],
-                  ["Register Number", viewingContact.registerNumber],
-                  ["Year of Study", viewingContact.yearOfStudy],
-                  ["Graduation Year", viewingContact.graduationYear],
-                ]}
-              />
+                <ViewSection
+                  title="👨‍👩‍👦 Family"
+                  fields={[
+                    [
+                      "Father Name",
+                      viewingContact.fatherName,
+                    ],
+                    [
+                      "Father Phone Number",
+                      viewingContact.fatherPhone,
+                    ],
+                    [
+                      "Mother Name",
+                      viewingContact.motherName,
+                    ],
+                    [
+                      "Mother Phone Number",
+                      viewingContact.motherPhone,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="👨‍👩‍👦 Family"
-                fields={[
-                  ["Father Name", viewingContact.fatherName],
-                  ["Father Phone Number", viewingContact.fatherPhone],
-                  ["Mother Name", viewingContact.motherName],
-                  ["Mother Phone Number", viewingContact.motherPhone],
-                ]}
-              />
+                <ViewSection
+                  title="🌐 Online"
+                  fields={[
+                    [
+                      "LinkedIn",
+                      viewingContact.linkedin,
+                    ],
+                    [
+                      "GitHub",
+                      viewingContact.github,
+                    ],
+                    [
+                      "Personal Website",
+                      viewingContact.personalWebsite,
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="🌐 Online"
-                fields={[
-                  ["LinkedIn", viewingContact.linkedin],
-                  ["GitHub", viewingContact.github],
-                  ["Personal Website", viewingContact.personalWebsite],
-                ]}
-              />
+                <ViewSection
+                  title="📝 Additional"
+                  fields={[
+                    [
+                      "Blood Group",
+                      viewingContact.bloodGroup,
+                    ],
+                    [
+                      "Tags",
+                      Array.isArray(
+                        viewingContact.tags
+                      )
+                        ? viewingContact.tags.join(
+                            ", "
+                          )
+                        : viewingContact.tags,
+                    ],
+                    [
+                      "Favorite",
+                      viewingContact.favorite
+                        ? "★ Yes"
+                        : "☆ No",
+                    ],
+                  ]}
+                />
 
-              <ViewSection
-                title="📝 Additional"
-                fields={[
-                  ["Blood Group", viewingContact.bloodGroup],
-                  [
-                    "Tags",
-                    Array.isArray(viewingContact.tags)
-                      ? viewingContact.tags.join(", ")
-                      : viewingContact.tags,
-                  ],
-                  [
-                    "Favorite",
-                    viewingContact.favorite ? "★ Yes" : "☆ No",
-                  ],
-                ]}
-              />
+                <div className="view-section">
+                  <h3>📝 Notes</h3>
 
-              <div className="view-section">
-                <h3>📝 Notes</h3>
-                <div className="view-field full">
-                  <p>{viewingContact.notes || "—"}</p>
+                  <div className="view-field full">
+                    <p>
+                      {viewingContact.notes ||
+                        "—"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="view-footer">
-              <button
-                className="secondary-button"
-                onClick={closeViewContact}
-              >
-                Close
-              </button>
+              <div className="view-footer">
+                <button
+                  className="secondary-button"
+                  onClick={
+                    closeViewContact
+                  }
+                >
+                  Close
+                </button>
 
-              <button
-                className="primary-button"
-                onClick={() => {
-                  closeViewContact();
-                  openEditForm(viewingContact);
-                }}
-              >
-                Edit Contact
-              </button>
+                <button
+                  className="primary-button"
+                  onClick={() => {
+                    closeViewContact();
+                    openEditForm(
+                      viewingContact
+                    );
+                  }}
+                >
+                  Edit Contact
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }
 
-function ViewSection({ title, fields }) {
+function ViewSection({
+  title,
+  fields,
+}) {
   return (
     <div className="view-section">
       <h3>{title}</h3>
+
       <div className="view-grid">
-        {fields.map(([label, value]) => (
-          <div className="view-field" key={label}>
-            <label>{label}</label>
-            <p>{value || "—"}</p>
-          </div>
-        ))}
+        {fields.map(
+          ([label, value]) => (
+            <div
+              className="view-field"
+              key={label}
+            >
+              <label>{label}</label>
+
+              <p>
+                {value || "—"}
+              </p>
+            </div>
+          )
+        )}
       </div>
     </div>
   );
@@ -1583,10 +2194,21 @@ function FormField({
   placeholder = "",
 }) {
   return (
-    <div className={wide ? "form-field wide" : "form-field"}>
+    <div
+      className={
+        wide
+          ? "form-field wide"
+          : "form-field"
+      }
+    >
       <label>
         {label}
-        {required && <span className="required">*</span>}
+
+        {required && (
+          <span className="required">
+            *
+          </span>
+        )}
       </label>
 
       <input
@@ -1612,11 +2234,20 @@ function SelectField({
     <div className="form-field">
       <label>{label}</label>
 
-      <select name={name} value={value || ""} onChange={onChange}>
-        <option value="">Select {label}</option>
+      <select
+        name={name}
+        value={value || ""}
+        onChange={onChange}
+      >
+        <option value="">
+          Select {label}
+        </option>
 
         {options.map((option) => (
-          <option value={option} key={option}>
+          <option
+            value={option}
+            key={option}
+          >
             {option}
           </option>
         ))}

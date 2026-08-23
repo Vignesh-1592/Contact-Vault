@@ -1,10 +1,10 @@
 const Contact = require("../models/Contact");
 
-// CREATE CONTACT
 const createContact = async (req, res) => {
   try {
     const contactData = {
       ...req.body,
+      userId: req.user.userId,
       tags: Array.isArray(req.body.tags)
         ? req.body.tags
         : req.body.tags
@@ -33,10 +33,11 @@ const createContact = async (req, res) => {
   }
 };
 
-// GET ALL CONTACTS
 const getContacts = async (req, res) => {
   try {
-    const contacts = await Contact.find().sort({
+    const contacts = await Contact.find({
+      userId: req.user.userId,
+    }).sort({
       createdAt: -1,
     });
 
@@ -56,10 +57,12 @@ const getContacts = async (req, res) => {
   }
 };
 
-// GET SINGLE CONTACT
 const getContact = async (req, res) => {
   try {
-    const contact = await Contact.findById(req.params.id);
+    const contact = await Contact.findOne({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
     if (!contact) {
       return res.status(404).json({
@@ -83,12 +86,13 @@ const getContact = async (req, res) => {
   }
 };
 
-// UPDATE CONTACT
 const updateContact = async (req, res) => {
   try {
     const updateData = {
       ...req.body,
     };
+
+    delete updateData.userId;
 
     if (typeof updateData.tags === "string") {
       updateData.tags = updateData.tags
@@ -97,8 +101,11 @@ const updateContact = async (req, res) => {
         .filter(Boolean);
     }
 
-    const contact = await Contact.findByIdAndUpdate(
-      req.params.id,
+    const contact = await Contact.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        userId: req.user.userId,
+      },
       updateData,
       {
         new: true,
@@ -129,12 +136,12 @@ const updateContact = async (req, res) => {
   }
 };
 
-// DELETE CONTACT
 const deleteContact = async (req, res) => {
   try {
-    const contact = await Contact.findByIdAndDelete(
-      req.params.id
-    );
+    const contact = await Contact.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
     if (!contact) {
       return res.status(404).json({
@@ -158,12 +165,12 @@ const deleteContact = async (req, res) => {
   }
 };
 
-// TOGGLE FAVORITE
 const toggleFavorite = async (req, res) => {
   try {
-    const { id } = req.params;
-
-    const contact = await Contact.findById(id);
+    const contact = await Contact.findOne({
+      _id: req.params.id,
+      userId: req.user.userId,
+    });
 
     if (!contact) {
       return res.status(404).json({

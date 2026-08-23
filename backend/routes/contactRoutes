@@ -8,25 +8,23 @@ const {
   getContact,
   updateContact,
   deleteContact,
-  toggleFavorite
+  toggleFavorite,
 } = require("../controllers/contactController");
 
-// Create contact
+const protect = require("../middleware/authMiddleware");
+
+router.use(protect);
+
 router.post("/", createContact);
 
-// Get all contacts
 router.get("/", getContacts);
 
-// Get single contact
 router.get("/:id", getContact);
 
-// Update contact
 router.put("/:id", updateContact);
 
-// Toggle favorite
 router.put("/:id/favorite", toggleFavorite);
 
-// Delete contact
 router.delete("/:id", deleteContact);
 
 module.exports = router;
