@@ -9,6 +9,7 @@ const contactSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Basic
     name: {
       type: String,
       required: true,
@@ -39,6 +40,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Contact
     phone: {
       type: String,
       trim: true,
@@ -64,6 +66,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Address
     addressLine1: {
       type: String,
       trim: true,
@@ -94,6 +97,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Professional
     company: {
       type: String,
       trim: true,
@@ -119,6 +123,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Education
     institution: {
       type: String,
       trim: true,
@@ -144,6 +149,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Family
     fatherName: {
       type: String,
       trim: true,
@@ -164,6 +170,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Online
     linkedin: {
       type: String,
       trim: true,
@@ -179,6 +186,7 @@ const contactSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Additional
     bloodGroup: {
       type: String,
       trim: true,
