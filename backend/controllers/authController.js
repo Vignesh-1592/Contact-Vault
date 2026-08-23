@@ -125,6 +125,7 @@ const login = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Unable to login",
+      error: error.message,
     });
   }
 };
