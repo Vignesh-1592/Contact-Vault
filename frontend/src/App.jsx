@@ -530,7 +530,6 @@ function App() {
           <div className="brand-logo">
             CV
           </div>
-
           <div>
             <h1>Contact Vault</h1>
             <span>Personal Network</span>
