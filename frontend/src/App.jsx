@@ -1,683 +1,627 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import "./App.css";
 
+const API_URL = "http://localhost:5000/api/contacts";
+
 const emptyForm = {
-    name: "",
-    surname: "",
-    initials: "",
-    phone: "",
-    alternatePhone: "",
-    email: "",
-    address: "",
-    bloodGroup: "",
-    fatherName: "",
-    motherName: "",
-    relationship: "",
-    company: "",
-    designation: ""
+  name: "",
+  surname: "",
+  initials: "",
+  phone: "",
+  alternatePhone: "",
+  email: "",
+  address: "",
+  bloodGroup: "",
+  fatherName: "",
+  motherName: "",
+  relationship: "",
+  company: "",
+  designation: "",
 };
 
 function App() {
-    const [showForm, setShowForm] = useState(false);
-    const [contacts, setContacts] = useState([]);
-    const [formData, setFormData] = useState(emptyForm);
-    const [editingId, setEditingId] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [message, setMessage] = useState("");
-    const [searchTerm, setSearchTerm] = useState("");
+  const [contacts, setContacts] = useState([]);
+  const [form, setForm] = useState(emptyForm);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
-    const fetchContacts = async () => {
-        try {
-            const response = await fetch(
-                "http://localhost:5000/api/contacts"
-            );
+  useEffect(() => {
+    fetchContacts();
+  }, []);
 
-            const data = await response.json();
+  const fetchContacts = async () => {
+    try {
+      setLoading(true);
 
-            if (data.success) {
-                setContacts(data.contacts);
-            }
-        } catch (error) {
-            console.error("Failed to fetch contacts:", error);
-            setMessage("Backend connection failed");
-        }
-    };
+      const response = await fetch(API_URL);
+      const data = await response.json();
 
-    useEffect(() => {
-        fetchContacts();
-    }, []);
+      if (data.success) {
+        setContacts(data.contacts || []);
+      } else {
+        setMessage("Failed to load contacts");
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("Backend connection failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const handleChange = (event) => {
-        const { name, value } = event.target;
+  const handleChange = (e) => {
+    const { name, value } = e.target;
 
-        setFormData({
-            ...formData,
-            [name]: value
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleAddContact = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+    setShowForm(true);
+    setMessage("");
+  };
+
+  const handleCancel = () => {
+    setForm(emptyForm);
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const url = editingId
+        ? `${API_URL}/${editingId}`
+        : API_URL;
+
+      const method = editingId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(form),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setMessage(data.message || "Operation failed");
+        return;
+      }
+
+      if (editingId) {
+        setMessage("Contact updated successfully");
+      } else {
+        setMessage("Contact saved successfully");
+      }
+
+      setForm(emptyForm);
+      setEditingId(null);
+      setShowForm(false);
+
+      await fetchContacts();
+    } catch (error) {
+      console.error(error);
+      setMessage("Backend connection failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = async (id) => {
+    try {
+      setLoading(true);
+      setMessage("");
+
+      const response = await fetch(`${API_URL}/${id}`);
+      const data = await response.json();
+
+      if (data.success) {
+        const contact = data.contact;
+
+        setForm({
+          name: contact.name || "",
+          surname: contact.surname || "",
+          initials: contact.initials || "",
+          phone: contact.phone || "",
+          alternatePhone: contact.alternatePhone || "",
+          email: contact.email || "",
+          address: contact.address || "",
+          bloodGroup: contact.bloodGroup || "",
+          fatherName: contact.fatherName || "",
+          motherName: contact.motherName || "",
+          relationship: contact.relationship || "",
+          company: contact.company || "",
+          designation: contact.designation || "",
         });
-    };
 
-    const openAddForm = () => {
-        setFormData(emptyForm);
-        setEditingId(null);
-        setMessage("");
+        setEditingId(id);
         setShowForm(true);
-    };
+      } else {
+        setMessage("Contact not found");
+      }
+    } catch (error) {
+      console.error(error);
+      setMessage("Backend connection failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    const openEditForm = (contact) => {
-        setFormData({
-            name: contact.name || "",
-            surname: contact.surname || "",
-            initials: contact.initials || "",
-            phone: contact.phone || "",
-            alternatePhone: contact.alternatePhone || "",
-            email: contact.email || "",
-            address: contact.address || "",
-            bloodGroup: contact.bloodGroup || "",
-            fatherName: contact.fatherName || "",
-            motherName: contact.motherName || "",
-            relationship: contact.relationship || "",
-            company: contact.company || "",
-            designation: contact.designation || ""
-        });
+  const handleDelete = async (id) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this contact?"
+    );
 
-        setEditingId(contact._id);
-        setMessage("");
-        setShowForm(true);
-    };
+    if (!confirmed) {
+      return;
+    }
 
-    const closeForm = () => {
-        setShowForm(false);
-        setFormData(emptyForm);
-        setEditingId(null);
-    };
+    try {
+      setLoading(true);
+      setMessage("");
 
-    const handleSubmit = async (event) => {
-        event.preventDefault();
+      const response = await fetch(`${API_URL}/${id}`, {
+        method: "DELETE",
+      });
 
-        setLoading(true);
-        setMessage("");
+      const data = await response.json();
 
-        try {
-            const url = editingId
-                ? `http://localhost:5000/api/contacts/${editingId}`
-                : "http://localhost:5000/api/contacts";
+      if (!response.ok || !data.success) {
+        setMessage(data.message || "Failed to delete contact");
+        return;
+      }
 
-            const method = editingId ? "PUT" : "POST";
+      setMessage("Contact deleted successfully");
 
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify(formData)
-            });
+      await fetchContacts();
+    } catch (error) {
+      console.error(error);
+      setMessage("Backend connection failed");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            const data = await response.json();
-
-            if (data.success) {
-                setMessage(
-                    editingId
-                        ? "Contact updated successfully"
-                        : "Contact saved successfully"
-                );
-
-                closeForm();
-                fetchContacts();
-            } else {
-                setMessage(data.message || "Operation failed");
-            }
-        } catch (error) {
-            console.error("Save error:", error);
-            setMessage("Backend connection failed");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleDelete = async (id) => {
-        const confirmDelete = window.confirm(
-            "Are you sure you want to delete this contact?"
-        );
-
-        if (!confirmDelete) {
-            return;
-        }
-
-        try {
-            const response = await fetch(
-                `http://localhost:5000/api/contacts/${id}`,
-                {
-                    method: "DELETE"
-                }
-            );
-
-            const data = await response.json();
-
-            if (data.success) {
-                setMessage("Contact deleted successfully");
-                fetchContacts();
-            } else {
-                setMessage(
-                    data.message || "Failed to delete contact"
-                );
-            }
-        } catch (error) {
-            console.error("Delete error:", error);
-            setMessage("Backend connection failed");
-        }
-    };
-
-    const filteredContacts = contacts.filter((contact) => {
-        const search = searchTerm.toLowerCase();
-
-        return (
-            (contact.name || "")
-                .toLowerCase()
-                .includes(search) ||
-            (contact.surname || "")
-                .toLowerCase()
-                .includes(search) ||
-            (contact.phone || "")
-                .toLowerCase()
-                .includes(search) ||
-            (contact.email || "")
-                .toLowerCase()
-                .includes(search) ||
-            (contact.company || "")
-                .toLowerCase()
-                .includes(search) ||
-            (contact.relationship || "")
-                .toLowerCase()
-                .includes(search)
-        );
-    });
+  const filteredContacts = contacts.filter((contact) => {
+    const searchText = search.toLowerCase();
 
     return (
-        <div className="app">
-            <header className="header">
-                <div>
-                    <h1>Contact Vault</h1>
-                    <p>
-                        Manage your personal and professional contacts
-                    </p>
+      (contact.name || "").toLowerCase().includes(searchText) ||
+      (contact.surname || "").toLowerCase().includes(searchText) ||
+      (contact.initials || "").toLowerCase().includes(searchText) ||
+      (contact.phone || "").toLowerCase().includes(searchText) ||
+      (contact.alternatePhone || "")
+        .toLowerCase()
+        .includes(searchText) ||
+      (contact.email || "").toLowerCase().includes(searchText) ||
+      (contact.address || "").toLowerCase().includes(searchText) ||
+      (contact.bloodGroup || "").toLowerCase().includes(searchText) ||
+      (contact.fatherName || "")
+        .toLowerCase()
+        .includes(searchText) ||
+      (contact.motherName || "")
+        .toLowerCase()
+        .includes(searchText) ||
+      (contact.relationship || "")
+        .toLowerCase()
+        .includes(searchText) ||
+      (contact.company || "").toLowerCase().includes(searchText) ||
+      (contact.designation || "")
+        .toLowerCase()
+        .includes(searchText)
+    );
+  });
+
+  const handleExportExcel = () => {
+    if (contacts.length === 0) {
+      setMessage("No contacts available to export");
+      return;
+    }
+
+    const excelData = contacts.map((contact) => ({
+      Name: contact.name || "",
+      Surname: contact.surname || "",
+      Initials: contact.initials || "",
+      Phone: contact.phone || "",
+      "Alternate Phone": contact.alternatePhone || "",
+      Email: contact.email || "",
+      Address: contact.address || "",
+      "Blood Group": contact.bloodGroup || "",
+      "Father Name": contact.fatherName || "",
+      "Mother Name": contact.motherName || "",
+      Relationship: contact.relationship || "",
+      Company: contact.company || "",
+      Designation: contact.designation || "",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    const workbook = XLSX.utils.book_new();
+
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      "Contacts"
+    );
+
+    XLSX.writeFile(
+      workbook,
+      "Contact_Vault.xlsx"
+    );
+
+    setMessage("Contacts exported successfully");
+  };
+
+  return (
+    <div className="app">
+      <header className="header">
+        <div>
+          <h1>Contact Vault</h1>
+          <p>Manage your personal and professional contacts</p>
+        </div>
+
+        <button
+          className="add-button"
+          onClick={handleAddContact}
+        >
+          + Add Contact
+        </button>
+      </header>
+
+      <main className="container">
+
+        {message && (
+          <div className="message">
+            {message}
+          </div>
+        )}
+
+        <div className="search-section">
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+
+          <button
+            className="export-button"
+            onClick={handleExportExcel}
+          >
+            Export Excel
+          </button>
+        </div>
+
+        {showForm && (
+          <div className="form-container">
+            <div className="form-header">
+              <h2>
+                {editingId
+                  ? "Edit Contact"
+                  : "Add New Contact"}
+              </h2>
+
+              <button
+                className="close-button"
+                onClick={handleCancel}
+              >
+                ×
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit}>
+
+              <div className="form-grid">
+
+                <div className="form-group">
+                  <label>Name *</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
+
+                <div className="form-group">
+                  <label>Surname</label>
+                  <input
+                    type="text"
+                    name="surname"
+                    value={form.surname}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Initials</label>
+                  <input
+                    type="text"
+                    name="initials"
+                    value={form.initials}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Phone *</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    value={form.phone}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Alternate Phone</label>
+                  <input
+                    type="text"
+                    name="alternatePhone"
+                    value={form.alternatePhone}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Address</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Blood Group</label>
+                  <input
+                    type="text"
+                    name="bloodGroup"
+                    value={form.bloodGroup}
+                    onChange={handleChange}
+                    placeholder="Example: O+"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Father Name</label>
+                  <input
+                    type="text"
+                    name="fatherName"
+                    value={form.fatherName}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Mother Name</label>
+                  <input
+                    type="text"
+                    name="motherName"
+                    value={form.motherName}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Relationship</label>
+                  <input
+                    type="text"
+                    name="relationship"
+                    value={form.relationship}
+                    onChange={handleChange}
+                    placeholder="Example: College Friend"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Company</label>
+                  <input
+                    type="text"
+                    name="company"
+                    value={form.company}
+                    onChange={handleChange}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Designation</label>
+                  <input
+                    type="text"
+                    name="designation"
+                    value={form.designation}
+                    onChange={handleChange}
+                    placeholder="Example: Software Engineer"
+                  />
+                </div>
+
+              </div>
+
+              <div className="form-actions">
 
                 <button
-                    className="add-button"
-                    onClick={openAddForm}
+                  type="button"
+                  className="cancel-button"
+                  onClick={handleCancel}
                 >
-                    + Add Contact
+                  Cancel
                 </button>
-            </header>
 
-            <main className="main">
-                {message && (
-                    <div className="success-message">
-                        {message}
-                    </div>
-                )}
+                <button
+                  type="submit"
+                  className="save-button"
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Saving..."
+                    : editingId
+                    ? "Update Contact"
+                    : "Save Contact"}
+                </button>
 
-                <div className="toolbar">
-                    <input
-                        type="text"
-                        placeholder="Search contacts..."
-                        className="search-input"
-                        value={searchTerm}
-                        onChange={(event) =>
-                            setSearchTerm(event.target.value)
-                        }
-                    />
+              </div>
+
+            </form>
+          </div>
+        )}
+
+        <section className="contacts-section">
+
+          <div className="contacts-header">
+            <div>
+              <h2>Your Contacts</h2>
+              <p>
+                {contacts.length}{" "}
+                {contacts.length === 1
+                  ? "contact"
+                  : "contacts"}{" "}
+                saved
+              </p>
+            </div>
+          </div>
+
+          {loading && contacts.length === 0 ? (
+            <div className="empty-state">
+              <h3>Loading contacts...</h3>
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <div className="empty-state">
+
+              <div className="empty-icon">
+                👤
+              </div>
+
+              <h3>
+                {search
+                  ? "No contacts found"
+                  : "No contacts yet"}
+              </h3>
+
+              <p>
+                {search
+                  ? "Try a different search term."
+                  : "Add your first contact to start building your Contact Vault."}
+              </p>
+
+              {!search && (
+                <button
+                  className="first-contact-button"
+                  onClick={handleAddContact}
+                >
+                  + Add Your First Contact
+                </button>
+              )}
+
+            </div>
+          ) : (
+            <div className="contacts-grid">
+
+              {filteredContacts.map((contact) => (
+                <div
+                  className="contact-card"
+                  key={contact._id}
+                >
+
+                  <div className="contact-info">
+
+                    <h3>
+                      {contact.name}{" "}
+                      {contact.surname}
+                    </h3>
+
+                    {contact.relationship && (
+                      <p className="relationship">
+                        {contact.relationship}
+                      </p>
+                    )}
+
+                    {contact.phone && (
+                      <p>
+                        📞 {contact.phone}
+                      </p>
+                    )}
+
+                    {contact.email && (
+                      <p>
+                        ✉️ {contact.email}
+                      </p>
+                    )}
+
+                    {contact.company && (
+                      <p>
+                        🏢 {contact.company}
+                      </p>
+                    )}
+
+                    {contact.designation && (
+                      <p>
+                        💼 {contact.designation}
+                      </p>
+                    )}
+
+                  </div>
+
+                  <div className="contact-actions">
 
                     <button
-                        className="export-button"
-                        onClick={() =>
-                            alert(
-                                "Excel export will be added next."
-                            )
-                        }
+                      className="edit-button"
+                      onClick={() =>
+                        handleEdit(contact._id)
+                      }
                     >
-                        Export Excel
+                      Edit
                     </button>
+
+                    <button
+                      className="delete-button"
+                      onClick={() =>
+                        handleDelete(contact._id)
+                      }
+                    >
+                      Delete
+                    </button>
+
+                  </div>
+
                 </div>
+              ))}
 
-                <section className="contact-section">
-                    <div className="section-header">
-                        <div>
-                            <h2>Your Contacts</h2>
-                            <p>
-                                {contacts.length} contacts saved
-                            </p>
-                        </div>
-                    </div>
+            </div>
+          )}
 
-                    {filteredContacts.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-icon">
-                                👤
-                            </div>
+        </section>
 
-                            <h3>
-                                {contacts.length === 0
-                                    ? "No contacts yet"
-                                    : "No matching contacts"}
-                            </h3>
-
-                            <p>
-                                {contacts.length === 0
-                                    ? "Add your first contact to start building your Contact Vault."
-                                    : "Try searching with a different name, phone number, company or email."}
-                            </p>
-
-                            {contacts.length === 0 && (
-                                <button
-                                    className="empty-button"
-                                    onClick={openAddForm}
-                                >
-                                    + Add Your First Contact
-                                </button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="contacts-list">
-                            {filteredContacts.map((contact) => (
-                                <div
-                                    className="contact-card"
-                                    key={contact._id}
-                                >
-                                    <div className="contact-info">
-                                        <h3>
-                                            {contact.name}{" "}
-                                            {contact.surname}
-                                        </h3>
-
-                                        <p className="relationship">
-                                            {contact.relationship ||
-                                                "Contact"}
-                                        </p>
-
-                                        {contact.phone && (
-                                            <span>
-                                                📞 {contact.phone}
-                                            </span>
-                                        )}
-
-                                        {contact.email && (
-                                            <span>
-                                                ✉{" "}
-                                                {contact.email}
-                                            </span>
-                                        )}
-
-                                        {contact.company && (
-                                            <span>
-                                                🏢{" "}
-                                                {contact.company}
-                                            </span>
-                                        )}
-
-                                        {contact.designation && (
-                                            <span>
-                                                💼{" "}
-                                                {contact.designation}
-                                            </span>
-                                        )}
-                                    </div>
-
-                                    <div className="contact-actions">
-                                        <button
-                                            className="edit-button"
-                                            onClick={() =>
-                                                openEditForm(
-                                                    contact
-                                                )
-                                            }
-                                        >
-                                            Edit
-                                        </button>
-
-                                        <button
-                                            className="delete-button"
-                                            onClick={() =>
-                                                handleDelete(
-                                                    contact._id
-                                                )
-                                            }
-                                        >
-                                            Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </section>
-            </main>
-
-            {showForm && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-header">
-                            <div>
-                                <h2>
-                                    {editingId
-                                        ? "Edit Contact"
-                                        : "Add New Contact"}
-                                </h2>
-
-                                <p>
-                                    {editingId
-                                        ? "Update the contact details below"
-                                        : "Enter the contact details below"}
-                                </p>
-                            </div>
-
-                            <button
-                                className="close-button"
-                                onClick={closeForm}
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        <form
-                            className="contact-form"
-                            onSubmit={handleSubmit}
-                        >
-                            <div className="form-section">
-                                <h3>
-                                    Personal Information
-                                </h3>
-
-                                <div className="form-grid">
-                                    <div className="form-group">
-                                        <label>
-                                            Name *
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="name"
-                                            value={formData.name}
-                                            onChange={handleChange}
-                                            required
-                                            placeholder="Enter name"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Surname
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="surname"
-                                            value={formData.surname}
-                                            onChange={handleChange}
-                                            placeholder="Enter surname"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Initials
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="initials"
-                                            value={formData.initials}
-                                            onChange={handleChange}
-                                            placeholder="Enter initials"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Blood Group
-                                        </label>
-
-                                        <select
-                                            name="bloodGroup"
-                                            value={
-                                                formData.bloodGroup
-                                            }
-                                            onChange={handleChange}
-                                        >
-                                            <option value="">
-                                                Select blood group
-                                            </option>
-
-                                            <option value="O+">
-                                                O+
-                                            </option>
-
-                                            <option value="O-">
-                                                O-
-                                            </option>
-
-                                            <option value="A+">
-                                                A+
-                                            </option>
-
-                                            <option value="A-">
-                                                A-
-                                            </option>
-
-                                            <option value="B+">
-                                                B+
-                                            </option>
-
-                                            <option value="B-">
-                                                B-
-                                            </option>
-
-                                            <option value="AB+">
-                                                AB+
-                                            </option>
-
-                                            <option value="AB-">
-                                                AB-
-                                            </option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="form-section">
-                                <h3>
-                                    Contact Information
-                                </h3>
-
-                                <div className="form-grid">
-                                    <div className="form-group">
-                                        <label>
-                                            Phone *
-                                        </label>
-
-                                        <input
-                                            type="tel"
-                                            name="phone"
-                                            value={formData.phone}
-                                            onChange={handleChange}
-                                            required
-                                            placeholder="Enter phone number"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Alternate Phone
-                                        </label>
-
-                                        <input
-                                            type="tel"
-                                            name="alternatePhone"
-                                            value={
-                                                formData.alternatePhone
-                                            }
-                                            onChange={handleChange}
-                                            placeholder="Enter alternate number"
-                                        />
-                                    </div>
-
-                                    <div className="form-group full-width">
-                                        <label>
-                                            Email
-                                        </label>
-
-                                        <input
-                                            type="email"
-                                            name="email"
-                                            value={formData.email}
-                                            onChange={handleChange}
-                                            placeholder="Enter email address"
-                                        />
-                                    </div>
-
-                                    <div className="form-group full-width">
-                                        <label>
-                                            Address
-                                        </label>
-
-                                        <textarea
-                                            name="address"
-                                            value={formData.address}
-                                            onChange={handleChange}
-                                            placeholder="Enter address"
-                                            rows="3"
-                                        ></textarea>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="form-section">
-                                <h3>
-                                    Family Information
-                                </h3>
-
-                                <div className="form-grid">
-                                    <div className="form-group">
-                                        <label>
-                                            Father Name
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="fatherName"
-                                            value={
-                                                formData.fatherName
-                                            }
-                                            onChange={handleChange}
-                                            placeholder="Enter father name"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Mother Name
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="motherName"
-                                            value={
-                                                formData.motherName
-                                            }
-                                            onChange={handleChange}
-                                            placeholder="Enter mother name"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="form-section">
-                                <h3>
-                                    Professional Information
-                                </h3>
-
-                                <div className="form-grid">
-                                    <div className="form-group">
-                                        <label>
-                                            Company
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="company"
-                                            value={formData.company}
-                                            onChange={handleChange}
-                                            placeholder="Enter company"
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label>
-                                            Designation
-                                        </label>
-
-                                        <input
-                                            type="text"
-                                            name="designation"
-                                            value={
-                                                formData.designation
-                                            }
-                                            onChange={handleChange}
-                                            placeholder="Enter designation"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="form-section">
-                                <h3>
-                                    Relationship
-                                </h3>
-
-                                <div className="form-group full-width">
-                                    <label>
-                                        Relationship
-                                    </label>
-
-                                    <input
-                                        type="text"
-                                        name="relationship"
-                                        value={
-                                            formData.relationship
-                                        }
-                                        onChange={handleChange}
-                                        placeholder="Example: College Friend"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="form-actions">
-                                <button
-                                    type="button"
-                                    className="cancel-button"
-                                    onClick={closeForm}
-                                >
-                                    Cancel
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    className="save-button"
-                                    disabled={loading}
-                                >
-                                    {loading
-                                        ? "Processing..."
-                                        : editingId
-                                        ? "Update Contact"
-                                        : "Save Contact"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
+      </main>
+    </div>
+  );
 }
 
 export default App;
