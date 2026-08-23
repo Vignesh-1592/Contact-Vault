@@ -26,6 +26,7 @@ type Contact = {
   email?: string;
   company?: string;
   jobTitle?: string;
+  favorite?: boolean;
 };
 
 export default function DashboardScreen() {
@@ -39,15 +40,13 @@ export default function DashboardScreen() {
 
   const loadDashboard = async () => {
     try {
-      const token =
-        await SecureStore.getItemAsync(
-          "contactVaultToken"
-        );
+      const token = await SecureStore.getItemAsync(
+        "contactVaultToken"
+      );
 
-      const savedUser =
-        await SecureStore.getItemAsync(
-          "contactVaultUser"
-        );
+      const savedUser = await SecureStore.getItemAsync(
+        "contactVaultUser"
+      );
 
       if (!token) {
         router.replace("/login");
@@ -58,15 +57,12 @@ export default function DashboardScreen() {
         setUser(JSON.parse(savedUser));
       }
 
-      const response = await fetch(
-        `${API_URL}/contacts`,
-        {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await fetch(`${API_URL}/contacts`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -129,11 +125,8 @@ export default function DashboardScreen() {
     );
   };
 
-  const handleAddContact = () => {
-    Alert.alert(
-      "Add Contact",
-      "The Add Contact screen will be added next."
-    );
+  const handleContacts = () => {
+    router.push("/contacts");
   };
 
   if (loading) {
@@ -177,7 +170,6 @@ export default function DashboardScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-
         <View style={styles.welcomeCard}>
           <Text style={styles.welcomeLabel}>
             Welcome back,
@@ -193,7 +185,6 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.statsRow}>
-
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>
               {contacts.length}
@@ -206,16 +197,17 @@ export default function DashboardScreen() {
 
           <View style={styles.statCard}>
             <Text style={styles.statNumber}>
-              {contacts.filter(
-                (contact) => contact.phone
-              ).length}
+              {
+                contacts.filter(
+                  (contact) => contact.phone
+                ).length
+              }
             </Text>
 
             <Text style={styles.statLabel}>
               With Phone
             </Text>
           </View>
-
         </View>
 
         <View style={styles.sectionHeader}>
@@ -230,7 +222,7 @@ export default function DashboardScreen() {
           </View>
 
           <TouchableOpacity
-            onPress={handleAddContact}
+            onPress={handleContacts}
             style={styles.addButton}
             activeOpacity={0.8}
           >
@@ -257,7 +249,7 @@ export default function DashboardScreen() {
 
             <TouchableOpacity
               style={styles.emptyButton}
-              onPress={handleAddContact}
+              onPress={handleContacts}
               activeOpacity={0.8}
             >
               <Text style={styles.emptyButtonText}>
@@ -268,9 +260,11 @@ export default function DashboardScreen() {
         ) : (
           <View style={styles.contactsContainer}>
             {contacts.slice(0, 5).map((contact) => (
-              <View
+              <TouchableOpacity
                 key={contact._id}
                 style={styles.contactCard}
+                activeOpacity={0.8}
+                onPress={handleContacts}
               >
                 <View style={styles.contactAvatar}>
                   <Text
@@ -283,12 +277,20 @@ export default function DashboardScreen() {
                 </View>
 
                 <View style={styles.contactInfo}>
-                  <Text
-                    style={styles.contactName}
-                    numberOfLines={1}
-                  >
-                    {contact.name}
-                  </Text>
+                  <View style={styles.contactNameRow}>
+                    <Text
+                      style={styles.contactName}
+                      numberOfLines={1}
+                    >
+                      {contact.name}
+                    </Text>
+
+                    {contact.favorite && (
+                      <Text style={styles.favorite}>
+                        ★
+                      </Text>
+                    )}
+                  </View>
 
                   {contact.phone ? (
                     <Text
@@ -311,9 +313,21 @@ export default function DashboardScreen() {
                     </Text>
                   )}
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
           </View>
+        )}
+
+        {contacts.length > 5 && (
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={handleContacts}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.viewAllText}>
+              View All Contacts
+            </Text>
+          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -329,7 +343,6 @@ export default function DashboardScreen() {
             Logout
           </Text>
         </TouchableOpacity>
-
       </ScrollView>
     </SafeAreaView>
   );
@@ -404,7 +417,6 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 22,
     marginBottom: 16,
-
     shadowColor: "#315FE8",
     shadowOffset: {
       width: 0,
@@ -568,16 +580,41 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
+  contactNameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
   contactName: {
+    flex: 1,
     fontSize: 15,
     fontWeight: "700",
     color: "#101828",
     marginBottom: 5,
   },
 
+  favorite: {
+    color: "#F59E0B",
+    fontSize: 17,
+    marginLeft: 6,
+    marginBottom: 5,
+  },
+
   contactDetail: {
     fontSize: 12,
     color: "#667085",
+  },
+
+  viewAllButton: {
+    marginTop: 15,
+    alignItems: "center",
+    paddingVertical: 13,
+  },
+
+  viewAllText: {
+    color: "#315FE8",
+    fontSize: 14,
+    fontWeight: "700",
   },
 
   logoutButton: {
