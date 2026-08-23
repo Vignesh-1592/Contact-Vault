@@ -62,6 +62,8 @@ export default function Register({ onLogin }) {
         return;
       }
 
+      alert("Account created successfully!");
+
     } catch (error) {
       setError(error.message || "Registration failed");
     } finally {
