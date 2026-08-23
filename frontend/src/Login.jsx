@@ -32,26 +32,16 @@ export default function Login({ onRegister }) {
     try {
       setLoading(true);
 
-      const response = await fetch(
-        "https://contact-vault-api.onrender.com/api/auth/login",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(form),
-        }
+      const result = await login(
+        form.email,
+        form.password
       );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
+      if (!result.success) {
+        setError(result.message);
       }
-
-      login(data);
     } catch (error) {
-      setError(error.message);
+      setError(error.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -64,18 +54,24 @@ export default function Login({ onRegister }) {
 
       <div className="auth-container">
         <div className="auth-card">
+
           <div className="auth-logo">
             CV
           </div>
 
           <div className="auth-header">
             <h1>Contact Vault</h1>
+
             <p>
               Sign in to access your private contact vault
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-form">
+          <form
+            onSubmit={handleSubmit}
+            className="auth-form"
+          >
+
             {error && (
               <div className="auth-error">
                 {error}
@@ -121,10 +117,14 @@ export default function Login({ onRegister }) {
             >
               {loading ? "Signing in..." : "Sign In"}
             </button>
+
           </form>
 
           <div className="auth-footer">
-            <span>Don't have an account?</span>
+
+            <span>
+              Don't have an account?
+            </span>
 
             <button
               type="button"
@@ -133,17 +133,27 @@ export default function Login({ onRegister }) {
             >
               Create an account
             </button>
+
           </div>
 
           <div className="secure-message">
-            <span className="secure-icon">🔒</span>
-            <span>Your contacts are private and secure</span>
+
+            <span className="secure-icon">
+              🔒
+            </span>
+
+            <span>
+              Your contacts are private and secure
+            </span>
+
           </div>
+
         </div>
 
         <p className="auth-copyright">
           © 2026 Contact Vault
         </p>
+
       </div>
     </div>
   );
