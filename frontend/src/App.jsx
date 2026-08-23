@@ -625,12 +625,22 @@ function App() {
           </button>
 
           <button
-            className="nav-item"
-            onClick={logout}
-          >
-            <span>↪</span>
-            Logout
-          </button>
+  className="nav-item"
+  onClick={() => {
+    const confirmed = window.confirm(
+      "Are you sure you want to log out?\n\nYou will need to sign in again to access your Contact Vault."
+    );
+
+    if (confirmed) {
+      logout();
+    }
+  }}
+>
+  <span>↪</span>
+  Logout
+</button>
+
+
         </nav>
 
         <div className="sidebar-bottom">
