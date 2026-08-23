@@ -1,16 +1,11 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
 require("dotenv").config();
 
-const express = require("express");
-const cors = require("cors");
-
-const connectDB = require("./config/db");
 const contactRoutes = require("./routes/contactRoutes");
 
 const app = express();
-
-const PORT = 5000;
-
-connectDB();
 
 app.use(cors());
 app.use(express.json());
@@ -18,9 +13,23 @@ app.use(express.json());
 app.use("/api/contacts", contactRoutes);
 
 app.get("/", (req, res) => {
-    res.send("Contact Vault Backend is running");
+  res.json({
+    success: true,
+    message: "Contact Vault API is running"
+  });
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+const PORT = 5000;
+
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB connected successfully");
+
+    app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("MongoDB connection error:", error);
+  });
