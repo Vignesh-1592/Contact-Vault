@@ -40,6 +40,8 @@ export default function DashboardScreen() {
 
   const loadDashboard = async () => {
     try {
+      setLoading(true);
+
       const token = await SecureStore.getItemAsync(
         "contactVaultToken"
       );
@@ -61,6 +63,7 @@ export default function DashboardScreen() {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       });
 
@@ -92,9 +95,27 @@ export default function DashboardScreen() {
       }
     } catch (error) {
       console.log("Dashboard error:", error);
+
+      Alert.alert(
+        "Error",
+        "Unable to load your contacts."
+      );
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleContacts = () => {
+    router.push("/contacts");
+  };
+
+  const handleEditContact = (contactId: string) => {
+    router.push({
+      pathname: "/edit-contact",
+      params: {
+        id: contactId,
+      },
+    });
   };
 
   const handleLogout = () => {
@@ -123,10 +144,6 @@ export default function DashboardScreen() {
         },
       ]
     );
-  };
-
-  const handleContacts = () => {
-    router.push("/contacts");
   };
 
   if (loading) {
@@ -260,60 +277,77 @@ export default function DashboardScreen() {
         ) : (
           <View style={styles.contactsContainer}>
             {contacts.slice(0, 5).map((contact) => (
-              <TouchableOpacity
+              <View
                 key={contact._id}
                 style={styles.contactCard}
-                activeOpacity={0.8}
-                onPress={handleContacts}
               >
-                <View style={styles.contactAvatar}>
-                  <Text
-                    style={styles.contactAvatarText}
-                  >
-                    {contact.name
-                      .charAt(0)
-                      .toUpperCase()}
-                  </Text>
-                </View>
-
-                <View style={styles.contactInfo}>
-                  <View style={styles.contactNameRow}>
+                <TouchableOpacity
+                  style={styles.contactMain}
+                  activeOpacity={0.8}
+                  onPress={() =>
+                    handleEditContact(contact._id)
+                  }
+                >
+                  <View style={styles.contactAvatar}>
                     <Text
-                      style={styles.contactName}
-                      numberOfLines={1}
+                      style={styles.contactAvatarText}
                     >
-                      {contact.name}
+                      {contact.name
+                        .charAt(0)
+                        .toUpperCase()}
                     </Text>
+                  </View>
 
-                    {contact.favorite && (
-                      <Text style={styles.favorite}>
-                        ★
+                  <View style={styles.contactInfo}>
+                    <View style={styles.contactNameRow}>
+                      <Text
+                        style={styles.contactName}
+                        numberOfLines={1}
+                      >
+                        {contact.name}
+                      </Text>
+
+                      {contact.favorite && (
+                        <Text style={styles.favorite}>
+                          ★
+                        </Text>
+                      )}
+                    </View>
+
+                    {contact.phone ? (
+                      <Text
+                        style={styles.contactDetail}
+                        numberOfLines={1}
+                      >
+                        📞 {contact.phone}
+                      </Text>
+                    ) : contact.email ? (
+                      <Text
+                        style={styles.contactDetail}
+                        numberOfLines={1}
+                      >
+                        ✉️ {contact.email}
+                      </Text>
+                    ) : (
+                      <Text style={styles.contactDetail}>
+                        No contact details
                       </Text>
                     )}
                   </View>
+                </TouchableOpacity>
 
-                  {contact.phone ? (
-                    <Text
-                      style={styles.contactDetail}
-                    >
-                      📞 {contact.phone}
-                    </Text>
-                  ) : contact.email ? (
-                    <Text
-                      style={styles.contactDetail}
-                      numberOfLines={1}
-                    >
-                      ✉️ {contact.email}
-                    </Text>
-                  ) : (
-                    <Text
-                      style={styles.contactDetail}
-                    >
-                      No contact details
-                    </Text>
-                  )}
-                </View>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editButton}
+                  onPress={() =>
+                    handleEditContact(contact._id)
+                  }
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.editButtonText}>
+                    Edit
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
@@ -560,6 +594,12 @@ const styles = StyleSheet.create({
     borderColor: "#EAECF0",
   },
 
+  contactMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
   contactAvatar: {
     width: 48,
     height: 48,
@@ -603,6 +643,20 @@ const styles = StyleSheet.create({
   contactDetail: {
     fontSize: 12,
     color: "#667085",
+  },
+
+  editButton: {
+    backgroundColor: "#E5EDFF",
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 9,
+    marginLeft: 10,
+  },
+
+  editButtonText: {
+    color: "#315FE8",
+    fontSize: 13,
+    fontWeight: "700",
   },
 
   viewAllButton: {

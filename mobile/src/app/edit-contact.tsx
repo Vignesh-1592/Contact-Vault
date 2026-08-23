@@ -1,4 +1,6 @@
-import { useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,12 +13,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { router } from "expo-router";
-import * as SecureStore from "expo-secure-store";
 
-const API_URL = "https://contact-vault-api.onrender.com/api";
+const API_URL = "http://10.0.2.2:5000";
 
-export default function AddContactScreen() {
+export default function EditContactScreen() {
+  const router = useRouter();
+
+  const { id } = useLocalSearchParams<{ id: string }>();
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -24,31 +31,94 @@ export default function AddContactScreen() {
   const [jobTitle, setJobTitle] = useState("");
   const [tags, setTags] = useState("");
 
-  const [loading, setLoading] = useState(false);
-
-  const handleCreateContact = async () => {
-    if (!name.trim()) {
-      Alert.alert("Missing Information", "Please enter the contact name.");
+  useEffect(() => {
+    if (!id) {
+      Alert.alert("Error", "Contact ID is missing.");
+      router.back();
       return;
     }
 
+    loadContact();
+  }, [id]);
+
+  const loadContact = async () => {
     try {
       setLoading(true);
 
-      const token = await SecureStore.getItemAsync(
-        "contactVaultToken"
-      );
+      const token = await AsyncStorage.getItem("token");
 
       if (!token) {
+        Alert.alert("Session Expired", "Please login again.");
         router.replace("/login");
         return;
       }
 
-      const response = await fetch(`${API_URL}/contacts`, {
-        method: "POST",
+      const response = await fetch(`${API_URL}/api/contacts/${id}`, {
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        Alert.alert(
+          "Error",
+          data.message || "Unable to load contact."
+        );
+        router.back();
+        return;
+      }
+
+      const contact = data.contact;
+
+      setName(contact.name || "");
+      setPhone(contact.phone || "");
+      setEmail(contact.email || "");
+      setCompany(contact.company || "");
+      setJobTitle(contact.jobTitle || "");
+
+      if (Array.isArray(contact.tags)) {
+        setTags(contact.tags.join(", "));
+      } else {
+        setTags(contact.tags || "");
+      }
+    } catch (error) {
+      console.error("Load contact error:", error);
+
+      Alert.alert(
+        "Error",
+        "Unable to load contact. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdate = async () => {
+    if (!name.trim()) {
+      Alert.alert("Required", "Please enter the contact name.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert("Session Expired", "Please login again.");
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/contacts/${id}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name: name.trim(),
@@ -62,40 +132,119 @@ export default function AddContactScreen() {
 
       const data = await response.json();
 
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Unable to create contact"
+      if (!response.ok || !data.success) {
+        Alert.alert(
+          "Update Failed",
+          data.message || "Unable to update contact."
         );
+        return;
       }
 
       Alert.alert(
-        "Contact Created",
-        "Contact created successfully.",
+        "Contact Updated",
+        "Contact updated successfully.",
         [
           {
             text: "OK",
-            onPress: () => router.replace("/contacts"),
+            onPress: () => router.back(),
           },
         ]
       );
-    } catch (error: any) {
+    } catch (error) {
+      console.error("Update contact error:", error);
+
       Alert.alert(
-        "Unable to Create Contact",
-        error.message || "Something went wrong."
+        "Error",
+        "Unable to update contact. Please try again."
       );
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Delete Contact",
+      "Are you sure you want to delete this contact?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: deleteContact,
+        },
+      ]
+    );
+  };
+
+  const deleteContact = async () => {
+    try {
+      setSaving(true);
+
+      const token = await AsyncStorage.getItem("token");
+
+      if (!token) {
+        Alert.alert("Session Expired", "Please login again.");
+        router.replace("/login");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/contacts/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        Alert.alert(
+          "Delete Failed",
+          data.message || "Unable to delete contact."
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Contact Deleted",
+        "Contact deleted successfully.",
+        [
+          {
+            text: "OK",
+            onPress: () => router.replace("/dashboard"),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Delete contact error:", error);
+
+      Alert.alert(
+        "Error",
+        "Unable to delete contact. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#315DEB" />
+        <Text style={styles.loadingText}>Loading contact...</Text>
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={
-        Platform.OS === "ios"
-          ? "padding"
-          : undefined
-      }
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.header}>
         <TouchableOpacity
@@ -105,9 +254,7 @@ export default function AddContactScreen() {
           <Text style={styles.backText}>‹</Text>
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>
-          Add Contact
-        </Text>
+        <Text style={styles.headerTitle}>Edit Contact</Text>
 
         <View style={styles.headerSpace} />
       </View>
@@ -117,93 +264,74 @@ export default function AddContactScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.iconContainer}>
-          <Text style={styles.icon}>+</Text>
-        </View>
-
-        <Text style={styles.title}>
-          Create New Contact
-        </Text>
+        <Text style={styles.title}>Edit Contact</Text>
 
         <Text style={styles.subtitle}>
-          Add contact details to your private vault.
+          Update your contact details.
         </Text>
 
         <View style={styles.form}>
-          <Text style={styles.label}>
-            Full Name *
-          </Text>
+          <Text style={styles.label}>Full Name *</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Enter full name"
-            placeholderTextColor="#98A2B3"
             value={name}
             onChangeText={setName}
-            autoCapitalize="words"
+            placeholder="Enter full name"
+            placeholderTextColor="#94A3B8"
           />
 
-          <Text style={styles.label}>
-            Phone Number
-          </Text>
+          <Text style={styles.label}>Phone Number</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Enter phone number"
-            placeholderTextColor="#98A2B3"
             value={phone}
             onChangeText={setPhone}
+            placeholder="Enter phone number"
+            placeholderTextColor="#94A3B8"
             keyboardType="phone-pad"
           />
 
-          <Text style={styles.label}>
-            Email
-          </Text>
+          <Text style={styles.label}>Email Address</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Enter email address"
-            placeholderTextColor="#98A2B3"
             value={email}
             onChangeText={setEmail}
+            placeholder="Enter email address"
+            placeholderTextColor="#94A3B8"
             keyboardType="email-address"
             autoCapitalize="none"
           />
 
-          <Text style={styles.label}>
-            Company
-          </Text>
+          <Text style={styles.label}>Company</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Enter company name"
-            placeholderTextColor="#98A2B3"
             value={company}
             onChangeText={setCompany}
+            placeholder="Enter company name"
+            placeholderTextColor="#94A3B8"
           />
 
-          <Text style={styles.label}>
-            Job Title
-          </Text>
+          <Text style={styles.label}>Job Title</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Enter job title"
-            placeholderTextColor="#98A2B3"
             value={jobTitle}
             onChangeText={setJobTitle}
+            placeholder="Enter job title"
+            placeholderTextColor="#94A3B8"
           />
 
-          <Text style={styles.label}>
-            Tags
-          </Text>
+          <Text style={styles.label}>Tags</Text>
 
           <TextInput
             style={styles.input}
-            placeholder="Example: friend, college, work"
-            placeholderTextColor="#98A2B3"
             value={tags}
             onChangeText={setTags}
+            placeholder="Example: friend, college, work"
+            placeholderTextColor="#94A3B8"
           />
 
           <Text style={styles.helper}>
@@ -212,32 +340,39 @@ export default function AddContactScreen() {
 
           <TouchableOpacity
             style={[
-              styles.createButton,
-              loading && styles.disabledButton,
+              styles.updateButton,
+              saving && styles.disabledButton,
             ]}
-            onPress={handleCreateContact}
-            disabled={loading}
+            onPress={handleUpdate}
+            disabled={saving}
             activeOpacity={0.8}
           >
-            {loading ? (
-              <ActivityIndicator
-                color="#FFFFFF"
-              />
+            {saving ? (
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <Text style={styles.createButtonText}>
-                Create Contact
+              <Text style={styles.updateButtonText}>
+                Save Changes
               </Text>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.deleteButtonText}>
+              Delete Contact
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => router.back()}
-            disabled={loading}
+            disabled={saving}
           >
-            <Text style={styles.cancelText}>
-              Cancel
-            </Text>
+            <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -251,76 +386,72 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F7FF",
   },
 
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F5F7FF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  loadingText: {
+    marginTop: 12,
+    fontSize: 15,
+    color: "#64748B",
+  },
+
   header: {
-    height: 82,
+    height: 70,
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "#EAECF0",
+    borderBottomColor: "#E2E8F0",
   },
 
   backButton: {
-    width: 44,
-    height: 44,
+    width: 45,
+    height: 45,
     alignItems: "center",
     justifyContent: "center",
   },
 
   backText: {
     fontSize: 38,
-    color: "#101828",
-    fontWeight: "300",
+    color: "#111827",
+    lineHeight: 40,
   },
 
   headerTitle: {
     fontSize: 20,
-    fontWeight: "800",
-    color: "#101828",
+    fontWeight: "700",
+    color: "#111827",
   },
 
   headerSpace: {
-    width: 44,
+    width: 45,
   },
 
   content: {
-    padding: 22,
-    paddingBottom: 40,
-  },
-
-  iconContainer: {
-    width: 68,
-    height: 68,
-    borderRadius: 20,
-    backgroundColor: "#E5EDFF",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "center",
-    marginTop: 10,
-    marginBottom: 16,
-  },
-
-  icon: {
-    color: "#315FE8",
-    fontSize: 38,
-    fontWeight: "400",
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 50,
   },
 
   title: {
-    textAlign: "center",
-    fontSize: 25,
+    fontSize: 28,
     fontWeight: "800",
-    color: "#101828",
+    color: "#111827",
+    textAlign: "center",
   },
 
   subtitle: {
+    marginTop: 8,
+    marginBottom: 30,
+    fontSize: 15,
+    color: "#64748B",
     textAlign: "center",
-    fontSize: 13,
-    color: "#667085",
-    marginTop: 7,
-    marginBottom: 28,
   },
 
   form: {
@@ -328,59 +459,77 @@ const styles = StyleSheet.create({
   },
 
   label: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#344054",
-    marginBottom: 7,
-    marginTop: 13,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 8,
+    marginTop: 16,
   },
 
   input: {
-    height: 52,
+    height: 58,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#D0D5DD",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    fontSize: 15,
-    color: "#101828",
+    borderColor: "#CBD5E1",
+    borderRadius: 14,
+    paddingHorizontal: 17,
+    fontSize: 16,
+    color: "#111827",
   },
 
   helper: {
-    fontSize: 11,
-    color: "#98A2B3",
-    marginTop: 6,
+    marginTop: 8,
+    fontSize: 12,
+    color: "#94A3B8",
   },
 
-  createButton: {
-    height: 54,
-    backgroundColor: "#315FE8",
-    borderRadius: 13,
+  updateButton: {
+    height: 58,
+    marginTop: 32,
+    borderRadius: 14,
+    backgroundColor: "#315DEB",
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 28,
+    elevation: 4,
   },
 
   disabledButton: {
-    opacity: 0.7,
+    opacity: 0.6,
   },
 
-  createButtonText: {
+  updateButtonText: {
     color: "#FFFFFF",
+    fontSize: 17,
+    fontWeight: "700",
+  },
+
+  deleteButton: {
+    height: 58,
+    marginTop: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#EF4444",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  deleteButtonText: {
+    color: "#EF4444",
     fontSize: 16,
     fontWeight: "700",
   },
 
   cancelButton: {
-    height: 52,
+    height: 55,
     alignItems: "center",
     justifyContent: "center",
     marginTop: 8,
   },
 
   cancelText: {
-    color: "#667085",
-    fontSize: 15,
+    color: "#64748B",
+    fontSize: 16,
     fontWeight: "600",
   },
 });
