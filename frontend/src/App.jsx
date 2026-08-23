@@ -24,6 +24,7 @@ function App() {
     const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
+    const [searchTerm, setSearchTerm] = useState("");
 
     const fetchContacts = async () => {
         try {
@@ -38,6 +39,7 @@ function App() {
             }
         } catch (error) {
             console.error("Failed to fetch contacts:", error);
+            setMessage("Backend connection failed");
         }
     };
 
@@ -122,17 +124,73 @@ function App() {
                 closeForm();
                 fetchContacts();
             } else {
-                setMessage(
-                    data.message || "Operation failed"
-                );
+                setMessage(data.message || "Operation failed");
             }
         } catch (error) {
-            console.error("Error:", error);
+            console.error("Save error:", error);
             setMessage("Backend connection failed");
         } finally {
             setLoading(false);
         }
     };
+
+    const handleDelete = async (id) => {
+        const confirmDelete = window.confirm(
+            "Are you sure you want to delete this contact?"
+        );
+
+        if (!confirmDelete) {
+            return;
+        }
+
+        try {
+            const response = await fetch(
+                `http://localhost:5000/api/contacts/${id}`,
+                {
+                    method: "DELETE"
+                }
+            );
+
+            const data = await response.json();
+
+            if (data.success) {
+                setMessage("Contact deleted successfully");
+                fetchContacts();
+            } else {
+                setMessage(
+                    data.message || "Failed to delete contact"
+                );
+            }
+        } catch (error) {
+            console.error("Delete error:", error);
+            setMessage("Backend connection failed");
+        }
+    };
+
+    const filteredContacts = contacts.filter((contact) => {
+        const search = searchTerm.toLowerCase();
+
+        return (
+            (contact.name || "")
+                .toLowerCase()
+                .includes(search) ||
+            (contact.surname || "")
+                .toLowerCase()
+                .includes(search) ||
+            (contact.phone || "")
+                .toLowerCase()
+                .includes(search) ||
+            (contact.email || "")
+                .toLowerCase()
+                .includes(search) ||
+            (contact.company || "")
+                .toLowerCase()
+                .includes(search) ||
+            (contact.relationship || "")
+                .toLowerCase()
+                .includes(search)
+        );
+    });
 
     return (
         <div className="app">
@@ -164,9 +222,20 @@ function App() {
                         type="text"
                         placeholder="Search contacts..."
                         className="search-input"
+                        value={searchTerm}
+                        onChange={(event) =>
+                            setSearchTerm(event.target.value)
+                        }
                     />
 
-                    <button className="export-button">
+                    <button
+                        className="export-button"
+                        onClick={() =>
+                            alert(
+                                "Excel export will be added next."
+                            )
+                        }
+                    >
                         Export Excel
                     </button>
                 </div>
@@ -181,29 +250,36 @@ function App() {
                         </div>
                     </div>
 
-                    {contacts.length === 0 ? (
+                    {filteredContacts.length === 0 ? (
                         <div className="empty-state">
                             <div className="empty-icon">
                                 👤
                             </div>
 
-                            <h3>No contacts yet</h3>
+                            <h3>
+                                {contacts.length === 0
+                                    ? "No contacts yet"
+                                    : "No matching contacts"}
+                            </h3>
 
                             <p>
-                                Add your first contact to start
-                                building your Contact Vault.
+                                {contacts.length === 0
+                                    ? "Add your first contact to start building your Contact Vault."
+                                    : "Try searching with a different name, phone number, company or email."}
                             </p>
 
-                            <button
-                                className="empty-button"
-                                onClick={openAddForm}
-                            >
-                                + Add Your First Contact
-                            </button>
+                            {contacts.length === 0 && (
+                                <button
+                                    className="empty-button"
+                                    onClick={openAddForm}
+                                >
+                                    + Add Your First Contact
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="contacts-list">
-                            {contacts.map((contact) => (
+                            {filteredContacts.map((contact) => (
                                 <div
                                     className="contact-card"
                                     key={contact._id}
@@ -214,24 +290,28 @@ function App() {
                                             {contact.surname}
                                         </h3>
 
-                                        <p>
+                                        <p className="relationship">
                                             {contact.relationship ||
                                                 "Contact"}
                                         </p>
 
-                                        <span>
-                                            📞 {contact.phone}
-                                        </span>
+                                        {contact.phone && (
+                                            <span>
+                                                📞 {contact.phone}
+                                            </span>
+                                        )}
 
                                         {contact.email && (
                                             <span>
-                                                ✉ {contact.email}
+                                                ✉{" "}
+                                                {contact.email}
                                             </span>
                                         )}
 
                                         {contact.company && (
                                             <span>
-                                                🏢 {contact.company}
+                                                🏢{" "}
+                                                {contact.company}
                                             </span>
                                         )}
 
@@ -257,7 +337,11 @@ function App() {
 
                                         <button
                                             className="delete-button"
-                                            onClick={() => {}}
+                                            onClick={() =>
+                                                handleDelete(
+                                                    contact._id
+                                                )
+                                            }
                                         >
                                             Delete
                                         </button>
@@ -313,12 +397,8 @@ function App() {
                                         <input
                                             type="text"
                                             name="name"
-                                            value={
-                                                formData.name
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.name}
+                                            onChange={handleChange}
                                             required
                                             placeholder="Enter name"
                                         />
@@ -332,12 +412,8 @@ function App() {
                                         <input
                                             type="text"
                                             name="surname"
-                                            value={
-                                                formData.surname
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.surname}
+                                            onChange={handleChange}
                                             placeholder="Enter surname"
                                         />
                                     </div>
@@ -350,12 +426,8 @@ function App() {
                                         <input
                                             type="text"
                                             name="initials"
-                                            value={
-                                                formData.initials
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.initials}
+                                            onChange={handleChange}
                                             placeholder="Enter initials"
                                         />
                                     </div>
@@ -370,35 +442,41 @@ function App() {
                                             value={
                                                 formData.bloodGroup
                                             }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            onChange={handleChange}
                                         >
                                             <option value="">
                                                 Select blood group
                                             </option>
-                                            <option>
+
+                                            <option value="O+">
                                                 O+
                                             </option>
-                                            <option>
+
+                                            <option value="O-">
                                                 O-
                                             </option>
-                                            <option>
+
+                                            <option value="A+">
                                                 A+
                                             </option>
-                                            <option>
+
+                                            <option value="A-">
                                                 A-
                                             </option>
-                                            <option>
+
+                                            <option value="B+">
                                                 B+
                                             </option>
-                                            <option>
+
+                                            <option value="B-">
                                                 B-
                                             </option>
-                                            <option>
+
+                                            <option value="AB+">
                                                 AB+
                                             </option>
-                                            <option>
+
+                                            <option value="AB-">
                                                 AB-
                                             </option>
                                         </select>
@@ -420,12 +498,8 @@ function App() {
                                         <input
                                             type="tel"
                                             name="phone"
-                                            value={
-                                                formData.phone
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.phone}
+                                            onChange={handleChange}
                                             required
                                             placeholder="Enter phone number"
                                         />
@@ -442,9 +516,7 @@ function App() {
                                             value={
                                                 formData.alternatePhone
                                             }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            onChange={handleChange}
                                             placeholder="Enter alternate number"
                                         />
                                     </div>
@@ -457,12 +529,8 @@ function App() {
                                         <input
                                             type="email"
                                             name="email"
-                                            value={
-                                                formData.email
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.email}
+                                            onChange={handleChange}
                                             placeholder="Enter email address"
                                         />
                                     </div>
@@ -474,12 +542,8 @@ function App() {
 
                                         <textarea
                                             name="address"
-                                            value={
-                                                formData.address
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.address}
+                                            onChange={handleChange}
                                             placeholder="Enter address"
                                             rows="3"
                                         ></textarea>
@@ -504,9 +568,7 @@ function App() {
                                             value={
                                                 formData.fatherName
                                             }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            onChange={handleChange}
                                             placeholder="Enter father name"
                                         />
                                     </div>
@@ -522,9 +584,7 @@ function App() {
                                             value={
                                                 formData.motherName
                                             }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            onChange={handleChange}
                                             placeholder="Enter mother name"
                                         />
                                     </div>
@@ -545,12 +605,8 @@ function App() {
                                         <input
                                             type="text"
                                             name="company"
-                                            value={
-                                                formData.company
-                                            }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            value={formData.company}
+                                            onChange={handleChange}
                                             placeholder="Enter company"
                                         />
                                     </div>
@@ -566,9 +622,7 @@ function App() {
                                             value={
                                                 formData.designation
                                             }
-                                            onChange={
-                                                handleChange
-                                            }
+                                            onChange={handleChange}
                                             placeholder="Enter designation"
                                         />
                                     </div>
@@ -591,9 +645,7 @@ function App() {
                                         value={
                                             formData.relationship
                                         }
-                                        onChange={
-                                            handleChange
-                                        }
+                                        onChange={handleChange}
                                         placeholder="Example: College Friend"
                                     />
                                 </div>
@@ -614,7 +666,7 @@ function App() {
                                     disabled={loading}
                                 >
                                     {loading
-                                        ? "Updating..."
+                                        ? "Processing..."
                                         : editingId
                                         ? "Update Contact"
                                         : "Save Contact"}
