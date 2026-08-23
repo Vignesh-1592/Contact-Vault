@@ -19,6 +19,8 @@ export default function Register({ onLogin }) {
       ...form,
       [e.target.name]: e.target.value,
     });
+
+    setError("");
   };
 
   const handleSubmit = async (e) => {
@@ -27,8 +29,8 @@ export default function Register({ onLogin }) {
     setError("");
 
     if (
-      !form.name ||
-      !form.email ||
+      !form.name.trim() ||
+      !form.email.trim() ||
       !form.password ||
       !form.confirmPassword
     ) {
@@ -49,32 +51,19 @@ export default function Register({ onLogin }) {
     try {
       setLoading(true);
 
-      const response = await fetch(
-        "https://contact-vault-api.onrender.com/api/auth/register",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            password: form.password,
-          }),
-        }
+      const result = await register(
+        form.name.trim(),
+        form.email.trim().toLowerCase(),
+        form.password
       );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message || "Registration failed"
-        );
+      if (!result.success) {
+        setError(result.message);
+        return;
       }
 
-      register(data);
     } catch (error) {
-      setError(error.message);
+      setError(error.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -87,18 +76,24 @@ export default function Register({ onLogin }) {
 
       <div className="auth-container">
         <div className="auth-card register-card">
+
           <div className="auth-logo">
             CV
           </div>
 
           <div className="auth-header">
             <h1>Create Account</h1>
+
             <p>
               Create your private Contact Vault account
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="auth-form">
+          <form
+            onSubmit={handleSubmit}
+            className="auth-form"
+          >
+
             {error && (
               <div className="auth-error">
                 {error}
@@ -178,10 +173,13 @@ export default function Register({ onLogin }) {
                 ? "Creating account..."
                 : "Create Account"}
             </button>
+
           </form>
 
           <div className="auth-footer">
-            <span>Already have an account?</span>
+            <span>
+              Already have an account?
+            </span>
 
             <button
               type="button"
@@ -193,14 +191,21 @@ export default function Register({ onLogin }) {
           </div>
 
           <div className="secure-message">
-            <span className="secure-icon">🔒</span>
-            <span>Your contacts are private and secure</span>
+            <span className="secure-icon">
+              🔒
+            </span>
+
+            <span>
+              Your contacts are private and secure
+            </span>
           </div>
+
         </div>
 
         <p className="auth-copyright">
           © 2026 Contact Vault
         </p>
+
       </div>
     </div>
   );
