@@ -21,12 +21,16 @@ function App() {
     const [showForm, setShowForm] = useState(false);
     const [contacts, setContacts] = useState([]);
     const [formData, setFormData] = useState(emptyForm);
+    const [editingId, setEditingId] = useState(null);
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState("");
 
     const fetchContacts = async () => {
         try {
-            const response = await fetch("http://localhost:5000/api/contacts");
+            const response = await fetch(
+                "http://localhost:5000/api/contacts"
+            );
+
             const data = await response.json();
 
             if (data.success) {
@@ -50,6 +54,41 @@ function App() {
         });
     };
 
+    const openAddForm = () => {
+        setFormData(emptyForm);
+        setEditingId(null);
+        setMessage("");
+        setShowForm(true);
+    };
+
+    const openEditForm = (contact) => {
+        setFormData({
+            name: contact.name || "",
+            surname: contact.surname || "",
+            initials: contact.initials || "",
+            phone: contact.phone || "",
+            alternatePhone: contact.alternatePhone || "",
+            email: contact.email || "",
+            address: contact.address || "",
+            bloodGroup: contact.bloodGroup || "",
+            fatherName: contact.fatherName || "",
+            motherName: contact.motherName || "",
+            relationship: contact.relationship || "",
+            company: contact.company || "",
+            designation: contact.designation || ""
+        });
+
+        setEditingId(contact._id);
+        setMessage("");
+        setShowForm(true);
+    };
+
+    const closeForm = () => {
+        setShowForm(false);
+        setFormData(emptyForm);
+        setEditingId(null);
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
 
@@ -57,29 +96,35 @@ function App() {
         setMessage("");
 
         try {
-            const response = await fetch(
-                "http://localhost:5000/api/contacts",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(formData)
-                }
-            );
+            const url = editingId
+                ? `http://localhost:5000/api/contacts/${editingId}`
+                : "http://localhost:5000/api/contacts";
+
+            const method = editingId ? "PUT" : "POST";
+
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(formData)
+            });
 
             const data = await response.json();
 
             if (data.success) {
-                setMessage("Contact saved successfully");
+                setMessage(
+                    editingId
+                        ? "Contact updated successfully"
+                        : "Contact saved successfully"
+                );
 
-                setFormData(emptyForm);
-
-                setShowForm(false);
-
+                closeForm();
                 fetchContacts();
             } else {
-                setMessage(data.message || "Failed to save contact");
+                setMessage(
+                    data.message || "Operation failed"
+                );
             }
         } catch (error) {
             console.error("Error:", error);
@@ -94,12 +139,14 @@ function App() {
             <header className="header">
                 <div>
                     <h1>Contact Vault</h1>
-                    <p>Manage your personal and professional contacts</p>
+                    <p>
+                        Manage your personal and professional contacts
+                    </p>
                 </div>
 
                 <button
                     className="add-button"
-                    onClick={() => setShowForm(true)}
+                    onClick={openAddForm}
                 >
                     + Add Contact
                 </button>
@@ -128,24 +175,28 @@ function App() {
                     <div className="section-header">
                         <div>
                             <h2>Your Contacts</h2>
-                            <p>{contacts.length} contacts saved</p>
+                            <p>
+                                {contacts.length} contacts saved
+                            </p>
                         </div>
                     </div>
 
                     {contacts.length === 0 ? (
                         <div className="empty-state">
-                            <div className="empty-icon">👤</div>
+                            <div className="empty-icon">
+                                👤
+                            </div>
 
                             <h3>No contacts yet</h3>
 
                             <p>
-                                Add your first contact to start building
-                                your Contact Vault.
+                                Add your first contact to start
+                                building your Contact Vault.
                             </p>
 
                             <button
                                 className="empty-button"
-                                onClick={() => setShowForm(true)}
+                                onClick={openAddForm}
                             >
                                 + Add Your First Contact
                             </button>
@@ -169,14 +220,47 @@ function App() {
                                         </p>
 
                                         <span>
-                                            {contact.phone}
+                                            📞 {contact.phone}
                                         </span>
+
+                                        {contact.email && (
+                                            <span>
+                                                ✉ {contact.email}
+                                            </span>
+                                        )}
 
                                         {contact.company && (
                                             <span>
-                                                {contact.company}
+                                                🏢 {contact.company}
                                             </span>
                                         )}
+
+                                        {contact.designation && (
+                                            <span>
+                                                💼{" "}
+                                                {contact.designation}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="contact-actions">
+                                        <button
+                                            className="edit-button"
+                                            onClick={() =>
+                                                openEditForm(
+                                                    contact
+                                                )
+                                            }
+                                        >
+                                            Edit
+                                        </button>
+
+                                        <button
+                                            className="delete-button"
+                                            onClick={() => {}}
+                                        >
+                                            Delete
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -190,13 +274,22 @@ function App() {
                     <div className="modal">
                         <div className="modal-header">
                             <div>
-                                <h2>Add New Contact</h2>
-                                <p>Enter the contact details below</p>
+                                <h2>
+                                    {editingId
+                                        ? "Edit Contact"
+                                        : "Add New Contact"}
+                                </h2>
+
+                                <p>
+                                    {editingId
+                                        ? "Update the contact details below"
+                                        : "Enter the contact details below"}
+                                </p>
                             </div>
 
                             <button
                                 className="close-button"
-                                onClick={() => setShowForm(false)}
+                                onClick={closeForm}
                             >
                                 ×
                             </button>
@@ -207,110 +300,186 @@ function App() {
                             onSubmit={handleSubmit}
                         >
                             <div className="form-section">
-                                <h3>Personal Information</h3>
+                                <h3>
+                                    Personal Information
+                                </h3>
 
                                 <div className="form-grid">
                                     <div className="form-group">
-                                        <label>Name *</label>
+                                        <label>
+                                            Name *
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="name"
-                                            value={formData.name}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.name
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             required
                                             placeholder="Enter name"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Surname</label>
+                                        <label>
+                                            Surname
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="surname"
-                                            value={formData.surname}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.surname
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter surname"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Initials</label>
+                                        <label>
+                                            Initials
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="initials"
-                                            value={formData.initials}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.initials
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter initials"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Blood Group</label>
+                                        <label>
+                                            Blood Group
+                                        </label>
+
                                         <select
                                             name="bloodGroup"
-                                            value={formData.bloodGroup}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.bloodGroup
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                         >
                                             <option value="">
                                                 Select blood group
                                             </option>
-                                            <option>O+</option>
-                                            <option>O-</option>
-                                            <option>A+</option>
-                                            <option>A-</option>
-                                            <option>B+</option>
-                                            <option>B-</option>
-                                            <option>AB+</option>
-                                            <option>AB-</option>
+                                            <option>
+                                                O+
+                                            </option>
+                                            <option>
+                                                O-
+                                            </option>
+                                            <option>
+                                                A+
+                                            </option>
+                                            <option>
+                                                A-
+                                            </option>
+                                            <option>
+                                                B+
+                                            </option>
+                                            <option>
+                                                B-
+                                            </option>
+                                            <option>
+                                                AB+
+                                            </option>
+                                            <option>
+                                                AB-
+                                            </option>
                                         </select>
                                     </div>
                                 </div>
                             </div>
 
                             <div className="form-section">
-                                <h3>Contact Information</h3>
+                                <h3>
+                                    Contact Information
+                                </h3>
 
                                 <div className="form-grid">
                                     <div className="form-group">
-                                        <label>Phone *</label>
+                                        <label>
+                                            Phone *
+                                        </label>
+
                                         <input
                                             type="tel"
                                             name="phone"
-                                            value={formData.phone}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.phone
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             required
                                             placeholder="Enter phone number"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Alternate Phone</label>
+                                        <label>
+                                            Alternate Phone
+                                        </label>
+
                                         <input
                                             type="tel"
                                             name="alternatePhone"
-                                            value={formData.alternatePhone}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.alternatePhone
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter alternate number"
                                         />
                                     </div>
 
                                     <div className="form-group full-width">
-                                        <label>Email</label>
+                                        <label>
+                                            Email
+                                        </label>
+
                                         <input
                                             type="email"
                                             name="email"
-                                            value={formData.email}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.email
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter email address"
                                         />
                                     </div>
 
                                     <div className="form-group full-width">
-                                        <label>Address</label>
+                                        <label>
+                                            Address
+                                        </label>
+
                                         <textarea
                                             name="address"
-                                            value={formData.address}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.address
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter address"
                                             rows="3"
                                         ></textarea>
@@ -319,27 +488,43 @@ function App() {
                             </div>
 
                             <div className="form-section">
-                                <h3>Family Information</h3>
+                                <h3>
+                                    Family Information
+                                </h3>
 
                                 <div className="form-grid">
                                     <div className="form-group">
-                                        <label>Father Name</label>
+                                        <label>
+                                            Father Name
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="fatherName"
-                                            value={formData.fatherName}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.fatherName
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter father name"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Mother Name</label>
+                                        <label>
+                                            Mother Name
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="motherName"
-                                            value={formData.motherName}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.motherName
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter mother name"
                                         />
                                     </div>
@@ -347,27 +532,43 @@ function App() {
                             </div>
 
                             <div className="form-section">
-                                <h3>Professional Information</h3>
+                                <h3>
+                                    Professional Information
+                                </h3>
 
                                 <div className="form-grid">
                                     <div className="form-group">
-                                        <label>Company</label>
+                                        <label>
+                                            Company
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="company"
-                                            value={formData.company}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.company
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter company"
                                         />
                                     </div>
 
                                     <div className="form-group">
-                                        <label>Designation</label>
+                                        <label>
+                                            Designation
+                                        </label>
+
                                         <input
                                             type="text"
                                             name="designation"
-                                            value={formData.designation}
-                                            onChange={handleChange}
+                                            value={
+                                                formData.designation
+                                            }
+                                            onChange={
+                                                handleChange
+                                            }
                                             placeholder="Enter designation"
                                         />
                                     </div>
@@ -375,15 +576,24 @@ function App() {
                             </div>
 
                             <div className="form-section">
-                                <h3>Relationship</h3>
+                                <h3>
+                                    Relationship
+                                </h3>
 
                                 <div className="form-group full-width">
-                                    <label>Relationship</label>
+                                    <label>
+                                        Relationship
+                                    </label>
+
                                     <input
                                         type="text"
                                         name="relationship"
-                                        value={formData.relationship}
-                                        onChange={handleChange}
+                                        value={
+                                            formData.relationship
+                                        }
+                                        onChange={
+                                            handleChange
+                                        }
                                         placeholder="Example: College Friend"
                                     />
                                 </div>
@@ -393,7 +603,7 @@ function App() {
                                 <button
                                     type="button"
                                     className="cancel-button"
-                                    onClick={() => setShowForm(false)}
+                                    onClick={closeForm}
                                 >
                                     Cancel
                                 </button>
@@ -404,7 +614,9 @@ function App() {
                                     disabled={loading}
                                 >
                                     {loading
-                                        ? "Saving..."
+                                        ? "Updating..."
+                                        : editingId
+                                        ? "Update Contact"
                                         : "Save Contact"}
                                 </button>
                             </div>

@@ -379,3 +379,52 @@
         grid-template-columns: 1fr;
     }
 }
+.contact-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.contact-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.edit-button,
+.delete-button {
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.edit-button {
+    background: white;
+    border: 1px solid #111111;
+    color: #111111;
+}
+
+.edit-button:hover {
+    background: #111111;
+    color: white;
+}
+
+.delete-button {
+    background: white;
+    border: 1px solid #d33;
+    color: #d33;
+}
+
+.delete-button:hover {
+    background: #d33;
+    color: white;
+}
+
+@media (max-width: 700px) {
+    .contact-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
