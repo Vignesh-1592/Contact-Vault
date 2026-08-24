@@ -7,11 +7,9 @@
     "icon": "./assets/images/icon.png",
     "scheme": "contactvault",
     "userInterfaceStyle": "automatic",
-
     "ios": {
       "icon": "./assets/expo.icon"
     },
-
     "android": {
       "package": "com.vignesh.contactvault",
       "adaptiveIcon": {
@@ -22,12 +20,10 @@
       },
       "predictiveBackGestureEnabled": false
     },
-
     "web": {
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
-
     "plugins": [
       "expo-router",
       [
@@ -40,10 +36,15 @@
       ],
       "expo-secure-store"
     ],
-
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bc3ea410-c1fa-47f3-a67a-a30dbb60a602"
+      }
     }
   }
 }
